@@ -1,17 +1,10 @@
 using System;
 using System.Collections.Generic;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Definitions;
-using PopupSystem.UI.Enum;
 
 namespace PopupSystem.UI.Runtime.Registry
 {
-    /// <summary>
-    /// Fully generic: it knows nothing about any specific window type. Every IWindowModule bound
-    /// in the installer (see AppInstaller) contributes its own WindowDefinition - adding a new
-    /// window type means writing one new XxxWindowModule next to that window and binding it,
-    /// never touching this class (mirrors the IWindowQueueAggregator multi-binding pattern
-    /// already used by WindowQueueRunner).
-    /// </summary>
     public sealed class WindowRegistry : IWindowRegistry
     {
         private readonly Dictionary<WindowType, WindowDefinition> _definitions;

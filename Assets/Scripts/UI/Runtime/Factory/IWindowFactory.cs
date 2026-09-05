@@ -1,15 +1,14 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using PopupSystem.UI.Core;
 
 namespace PopupSystem.UI.Runtime.Factory
 {
     public interface IWindowFactory
     {
-        WindowInstance Create(WindowRequest request);
+        UniTask<WindowInstance> CreateAsync(WindowRequest request, CancellationToken cancellationToken);
 
-        /// <summary>
-        /// Returns a closed instance's view to the pool for reuse by a later Create() of the same
-        /// window type, instead of destroying it - see WindowFactory for why.
-        /// </summary>
+        /// <summary>Returns the view to the pool instead of destroying it.</summary>
         void Release(WindowInstance instance);
     }
 }

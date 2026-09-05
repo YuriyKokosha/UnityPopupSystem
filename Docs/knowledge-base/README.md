@@ -1,0 +1,22 @@
+# Knowledge base
+
+Cross-cutting knowledge that used to live in code comments. These are the *engine- and
+library-level* facts and decisions — things that are true regardless of which class you are
+looking at, and things that were measured rather than assumed. Per-module documentation lives in
+[`../feature-maps/`](../feature-maps/); the layering and conventions live in `../../CLAUDE.md`.
+
+The code itself carries almost no comments by design (see `CLAUDE.md` §8). What is left in the
+code is a short XML-doc on the ports and contracts, plus a one-line warning at the handful of call
+sites where the surrounding lines look removable and are not. Everything else — the reasoning, the
+measurements, the history of what went wrong before — is here.
+
+| File | What it covers |
+|---|---|
+| [`unity-ui-canvas-and-input.md`](unity-ui-canvas-and-input.md) | Split canvases, `sortingOrder` vs hierarchy order, raycasters, `overrideSorting`, layer bands |
+| [`unitask-and-cancellation.md`](unitask-and-cancellation.md) | `Share()` vs `Preserve()`, which token belongs where, transactions, `async void`/`.Forget()` |
+| [`addressables-and-content.md`](addressables-and-content.md) | Handle lifetime, dedup, cached failures, the one blocking load, no code-built fallback |
+| [`zenject-composition.md`](zenject-composition.md) | Concrete-first binding, typed factories vs `DiContainer`, multi-binding, disposal, assemblies |
+| [`time-and-cooldowns.md`](time-and-cooldowns.md) | Server-anchored time, monotonic clocks, suspension, what cooldown semantics actually mean |
+| [`pooling-and-ownership.md`](pooling-and-ownership.md) | View pooling traps, who owns a downloaded texture, close-ordering constraints |
+| [`resilience.md`](resilience.md) | Degrade-don't-crash rules: which failures are contained where, and which are hard |
+| [`testing-in-unity.md`](testing-in-unity.md) | EditMode/PlayMode split, async test bodies, NUnit deadlocks, fake/production drift |

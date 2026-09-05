@@ -1,5 +1,5 @@
 using System;
-using PopupSystem.UI.Enum;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Transitions;
 
 namespace PopupSystem.UI.Definitions
@@ -11,19 +11,17 @@ namespace PopupSystem.UI.Definitions
         public UILayerType Layer { get; }
         public bool IsModal { get; }
         public Type ViewType { get; }
-        public string PrefabResourcePath { get; }
+        public string PrefabAddress { get; }
 
-        /// <summary>
-        /// How this window animates in/out. Null means instant show/hide - see WindowView.
-        /// </summary>
+        /// <summary>Null means instant show/hide.</summary>
         public IWindowTransition Transition { get; }
 
-        /// <summary>
-        /// Only meaningful when <see cref="IsModal"/> is true: whether tapping the backdrop
-        /// behind this window closes it. Defaults to false so an engagement/monetization popup
-        /// (e.g. an offer) is never dismissed by an accidental tap outside it.
-        /// </summary>
+        /// <summary>Modal windows only. Defaults to false so a monetisation popup is never lost to a stray tap.</summary>
         public bool CloseOnBackdropClick { get; }
+
+        /// <summary>The persistent screen everything else opens on top of: single-instance, its own slot, and not
+        /// "busy" for the queue. Exactly one window type sets it.</summary>
+        public bool IsBaseScreen { get; }
 
         public WindowDefinition(
             WindowType type,
@@ -31,18 +29,20 @@ namespace PopupSystem.UI.Definitions
             UILayerType layer,
             bool isModal,
             Type viewType,
-            string prefabResourcePath = null,
+            string prefabAddress = null,
             IWindowTransition transition = null,
-            bool closeOnBackdropClick = false)
+            bool closeOnBackdropClick = false,
+            bool isBaseScreen = false)
         {
             Type = type;
             Kind = kind;
             Layer = layer;
             IsModal = isModal;
             ViewType = viewType;
-            PrefabResourcePath = prefabResourcePath;
+            PrefabAddress = prefabAddress;
             Transition = transition;
             CloseOnBackdropClick = closeOnBackdropClick;
+            IsBaseScreen = isBaseScreen;
         }
     }
 }

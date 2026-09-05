@@ -4,11 +4,6 @@ using PopupSystem.Game.Domain.Inventory;
 
 namespace PopupSystem.Game.Domain.Offer
 {
-    /// <summary>
-    /// The economic/business terms of an offer (id, rewards, active window). Presentation copy
-    /// and the banner image live in <see cref="OfferRemoteContent"/> instead, fetched separately
-    /// from a remote config endpoint - see <see cref="PopupSystem.Game.Services.Offer.OfferManager"/>.
-    /// </summary>
     public sealed class OfferData
     {
         public string OfferId { get; }

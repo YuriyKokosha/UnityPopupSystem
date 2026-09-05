@@ -1,5 +1,5 @@
+using PopupSystem.Contracts;
 using PopupSystem.UI.Definitions;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime;
 using PopupSystem.UI.Runtime.Controller;
 using PopupSystem.UI.Transitions;
@@ -7,13 +7,9 @@ using Zenject;
 
 namespace PopupSystem.UI.Windows.DailyReward
 {
-    /// <summary>
-    /// Self-registering description of the DailyReward window - see IWindowModule for why this
-    /// exists instead of a case in a shared switch/dictionary.
-    /// </summary>
     public sealed class DailyRewardWindowModule : IWindowModule
     {
-        private readonly DiContainer _container;
+        private readonly IFactory<DailyRewardWindowController> _controllerFactory;
 
         public WindowDefinition Definition { get; } = new WindowDefinition(
             WindowType.DailyReward,
@@ -21,16 +17,14 @@ namespace PopupSystem.UI.Windows.DailyReward
             UILayerType.Windows,
             isModal: true,
             viewType: typeof(DailyRewardWindowView),
-            prefabResourcePath: "UI/Windows/DailyRewardWindow",
+            prefabAddress: "UI/Windows/DailyRewardWindow",
             transition: SharedWindowTransitions.PopupDefault);
-            // No closeOnBackdropClick: this is an engagement popup with a primary action - it
-            // should only close via an explicit button, never an accidental outside tap.
 
-        public DailyRewardWindowModule(DiContainer container)
+        public DailyRewardWindowModule(IFactory<DailyRewardWindowController> controllerFactory)
         {
-            _container = container;
+            _controllerFactory = controllerFactory;
         }
 
-        public IWindowController CreateController() => _container.Instantiate<DailyRewardWindowController>();
+        public IWindowController CreateController() => _controllerFactory.Create();
     }
 }

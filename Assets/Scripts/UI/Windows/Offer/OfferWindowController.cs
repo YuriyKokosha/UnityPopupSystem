@@ -1,13 +1,11 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Contracts;
 using PopupSystem.Extensions;
 using PopupSystem.Game.Domain.Offer;
 using PopupSystem.Game.Services.Offer;
-using PopupSystem.UI.Core;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime.Controller;
-using PopupSystem.UI.Runtime.Manager;
 using PopupSystem.UI.Services;
 using PopupSystem.UI.Windows.RewardPopup;
 
@@ -44,12 +42,6 @@ namespace PopupSystem.UI.Windows.Offer
                 return UniTask.CompletedTask;
             }
 
-            // The offer's own timing/rewards are known locally, but its copy and banner are not -
-            // show a neutral placeholder immediately and keep loading in the background rather
-            // than awaiting it here: WindowsManager only shows the window (Show() + transition)
-            // once InitializeAsync fully completes (see OpenInstanceAsync), so awaiting the fetch
-            // here would keep the window hidden for the entire wait and defeat the loading state
-            // below - it would only ever appear already-loaded.
             View.SetContent("Offer", "Loading offer...", string.Empty);
             LoadRemoteContentAsync(cancellationToken).Forget();
             return UniTask.CompletedTask;
@@ -67,13 +59,13 @@ namespace PopupSystem.UI.Windows.Offer
 
         private async UniTaskVoid LoadRemoteContentAsync(CancellationToken cancellationToken)
         {
-            View.SetBannerLoading(true);
+            var view = View;
+
+            view.SetBannerLoading(true);
 
             OfferRemoteContent content;
             try
             {
-                // OfferManager already degrades a remote-config failure to safe fallback copy,
-                // so only cancellation (window closed while we were fetching) can still throw.
                 content = await _offerManager.GetOfferContentAsync(_offerData, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -81,20 +73,17 @@ namespace PopupSystem.UI.Windows.Offer
                 return;
             }
 
-            // The window can be dismissed while the fetch is still in flight; WindowsManager
-            // cancels this instance's token immediately when that happens, before View is torn
-            // down. Bail out rather than touching a View that may already be destroyed.
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
 
-            View.SetContent(content.Title, content.Description, content.ActionText);
+            view.SetContent(content.Title, content.Description, content.ActionText);
 
             if (string.IsNullOrEmpty(content.BannerImageUrl))
             {
-                View.SetBannerLoading(false);
-                View.SetBannerFallback();
+                view.SetBannerLoading(false);
+                view.SetBannerFallback();
                 return;
             }
 
@@ -107,7 +96,7 @@ namespace PopupSystem.UI.Windows.Offer
                     return;
                 }
 
-                View.SetBannerTexture(texture);
+                view.SetBannerTexture(texture);
             }
             catch (OperationCanceledException)
             {
@@ -115,18 +104,16 @@ namespace PopupSystem.UI.Windows.Offer
             }
             catch (Exception)
             {
-                // Missing/unreachable banner asset must not break the offer itself - the copy
-                // and the buy button are still fully usable, just without the promo image.
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    View.SetBannerFallback();
+                    view.SetBannerFallback();
                 }
             }
             finally
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    View.SetBannerLoading(false);
+                    view.SetBannerLoading(false);
                 }
             }
         }
@@ -150,17 +137,21 @@ namespace PopupSystem.UI.Windows.Offer
 
         private async UniTaskVoid PurchaseOfferFlowAsync()
         {
-            // Same reasoning as DailyRewardWindowController: open the reward popup right away
-            // with the purchase still in flight (Share() - not Preserve(), see
-            // UniTaskShareExtensions - lets both this method and RewardPopupController await it
-            // concurrently) instead of waiting for it to resolve first - the popup's own loading
-            // state is then real, not a stub.
-            var purchaseTask = _offerManager.PurchaseOfferAsync(_offerData).Share();
+            var handle = Handle;
+
+            // CancellationToken.None deliberately: this window is the one the queue may force-close, and the
+            // lifetime token would cancel a payment the backend may already have taken.
+            var purchaseTask = _offerManager.PurchaseOfferAsync(_offerData, CancellationToken.None).Share();
             var rewardPopup = await _windowsManager.OpenAsync(WindowType.RewardPopup, new RewardPopupRequest(purchaseTask));
 
             try
             {
                 await purchaseTask;
+            }
+            catch (OperationCanceledException)
+            {
+                _isPurchaseInProgress = false;
+                return;
             }
             catch
             {
@@ -168,7 +159,11 @@ namespace PopupSystem.UI.Windows.Offer
                 throw;
             }
 
-            await Handle.CloseAsync();
+            if (!handle.IsClosed)
+            {
+                await handle.CloseAsync();
+            }
+
             await rewardPopup.WaitForCloseAsync();
         }
     }

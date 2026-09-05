@@ -5,12 +5,6 @@ using UnityEngine;
 
 namespace PopupSystem.UI.Transitions
 {
-    /// <summary>
-    /// Fades alpha (via a CanvasGroup, added on demand) while scaling the window in/out around
-    /// its own pivot. A dependency-free, per-frame lerp - no external tweening package required.
-    /// Stateless and reusable: a single instance can be shared by every window that wants the
-    /// same look (see WindowRegistry).
-    /// </summary>
     public sealed class FadeScaleWindowTransition : IWindowTransition
     {
         private readonly float _durationSeconds;
@@ -28,8 +22,8 @@ namespace PopupSystem.UI.Transitions
             var rectTransform = view.transform as RectTransform;
 
             canvasGroup.alpha = 0f;
-            // Defensive, not load-bearing today (views aren't pooled yet): guarantees the window
-            // is actually clickable even if its CanvasGroup came in with these left off somehow.
+            // Load-bearing because views are pooled: PlayCloseAsync turned both off, and a reopened window
+            // would otherwise render but ignore every click.
             canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
             SetUniformScale(rectTransform, _fromScale);
@@ -41,16 +35,11 @@ namespace PopupSystem.UI.Transitions
         {
             var canvasGroup = GetOrAddCanvasGroup(view);
 
-            // Stop accepting input the moment closing starts, not only once it's fully gone -
-            // otherwise a second tap during the fade-out (e.g. mashing "Buy" again) could still
-            // reach the window's buttons while it's visibly on its way out.
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
 
             var rectTransform = view.transform as RectTransform;
 
-            // Fades from wherever it currently is, not a hardcoded 1 - if this window was itself
-            // interrupted mid-open (see WindowQueueRunner), it may still be mid-fade-in.
             return AnimateAsync(canvasGroup, rectTransform, canvasGroup.alpha, 0f, 1f, _fromScale, cancellationToken);
         }
 
@@ -65,11 +54,6 @@ namespace PopupSystem.UI.Transitions
         {
             var elapsed = 0f;
 
-            // Yielding with `cancellationToken` here is what makes PlayOpenAsync actually throw
-            // OperationCanceledException when the window is interrupted mid-animation (it runs on
-            // the window's lifetime token) - WindowsManager relies on that to abort into its
-            // close path. PlayCloseAsync is always called with CancellationToken.None by
-            // WindowsManager, so for closing this loop simply can never be cancelled.
             while (elapsed < _durationSeconds)
             {
                 elapsed += Time.unscaledDeltaTime;

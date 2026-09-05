@@ -1,35 +1,45 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Contracts;
+using PopupSystem.UI.Runtime.Content;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace PopupSystem.UI.Runtime.Backdrop
 {
     public sealed class ModalBackdropPresenter
     {
-        private const string BackdropPrefabResourcePath = "UI/ModalBackdrop";
+        public const string BackdropPrefabAddress = "UI/ModalBackdrop";
 
         private readonly Func<WindowHandle, UniTask> _closeByHandleAsync;
-        private readonly Dictionary<Transform, GameObject> _backdrops = new();
+        private readonly IUiPrefabProvider _prefabProvider;
+        private readonly Dictionary<Transform, Backdrop> _backdrops = new();
+
+        private readonly Dictionary<Transform, WindowInstance> _topByLayer = new();
+
         private GameObject _cachedPrefab;
         private bool _prefabLookupAttempted;
 
-        public ModalBackdropPresenter(Func<WindowHandle, UniTask> closeByHandleAsync)
+        public ModalBackdropPresenter(
+            Func<WindowHandle, UniTask> closeByHandleAsync,
+            IUiPrefabProvider prefabProvider)
         {
             _closeByHandleAsync = closeByHandleAsync;
+            _prefabProvider = prefabProvider;
         }
 
-        public void Refresh(IEnumerable<WindowInstance> activeInstances)
+        public void Refresh(IReadOnlyList<WindowInstance> activeInstances)
         {
-            var topByLayer = new Dictionary<Transform, WindowInstance>();
+            _topByLayer.Clear();
 
-            foreach (var instance in activeInstances)
+            for (var i = 0; i < activeInstances.Count; i++)
             {
-                ConsiderForBackdrop(topByLayer, instance);
+                ConsiderForBackdrop(_topByLayer, activeInstances[i]);
             }
 
-            foreach (var pair in topByLayer)
+            foreach (var pair in _topByLayer)
             {
                 if (pair.Value.Definition.IsModal)
                 {
@@ -43,7 +53,7 @@ namespace PopupSystem.UI.Runtime.Backdrop
 
             foreach (var layerTransform in _backdrops.Keys)
             {
-                if (!topByLayer.ContainsKey(layerTransform))
+                if (!_topByLayer.ContainsKey(layerTransform))
                 {
                     HideBackdrop(layerTransform);
                 }
@@ -78,23 +88,23 @@ namespace PopupSystem.UI.Runtime.Backdrop
                 return;
             }
 
-            backdrop.SetActive(true);
-            backdrop.transform.SetAsLastSibling();
+            backdrop.GameObject.SetActive(true);
+            backdrop.GameObject.transform.SetAsLastSibling();
             topInstance.View.transform.SetAsLastSibling();
             WireBackdropDismiss(backdrop, topInstance);
         }
 
         private void HideBackdrop(Transform layerTransform)
         {
-            if (_backdrops.TryGetValue(layerTransform, out var backdrop) && backdrop != null)
+            if (_backdrops.TryGetValue(layerTransform, out var backdrop) && backdrop.GameObject != null)
             {
-                backdrop.SetActive(false);
+                backdrop.GameObject.SetActive(false);
             }
         }
 
-        private GameObject GetOrCreateBackdrop(Transform layerTransform)
+        private Backdrop GetOrCreateBackdrop(Transform layerTransform)
         {
-            if (_backdrops.TryGetValue(layerTransform, out var existing) && existing != null)
+            if (_backdrops.TryGetValue(layerTransform, out var existing) && existing.GameObject != null)
             {
                 return existing;
             }
@@ -105,14 +115,24 @@ namespace PopupSystem.UI.Runtime.Backdrop
                 return null;
             }
 
-            var backdrop = UnityEngine.Object.Instantiate(prefab, layerTransform, false);
-            var rectTransform = backdrop.GetComponent<RectTransform>();
+            var gameObject = UnityEngine.Object.Instantiate(prefab, layerTransform, false);
+
+            var rectTransform = gameObject.GetComponent<RectTransform>();
             if (rectTransform != null)
             {
                 rectTransform.anchorMin = Vector2.zero;
                 rectTransform.anchorMax = Vector2.one;
                 rectTransform.offsetMin = Vector2.zero;
                 rectTransform.offsetMax = Vector2.zero;
+            }
+
+            var backdrop = new Backdrop(gameObject, gameObject.GetComponent<Button>());
+
+            if (backdrop.Button == null)
+            {
+                Debug.LogWarning(
+                    $"ModalBackdropPresenter: prefab at '{BackdropPrefabAddress}' has no Button component - " +
+                    "backdrop-tap dismissal will not work.");
             }
 
             _backdrops[layerTransform] = backdrop;
@@ -127,38 +147,57 @@ namespace PopupSystem.UI.Runtime.Backdrop
             }
 
             _prefabLookupAttempted = true;
-            _cachedPrefab = Resources.Load<GameObject>(BackdropPrefabResourcePath);
+
+            // GetLoaded, not LoadAsync: Refresh runs inside synchronous open/close bookkeeping. AppEntryPoint
+            // preloads this address at startup.
+            _cachedPrefab = _prefabProvider.GetLoaded(BackdropPrefabAddress);
 
             if (_cachedPrefab == null)
             {
                 Debug.LogError(
-                    $"ModalBackdropPresenter: no prefab found at Resources path '{BackdropPrefabResourcePath}'. " +
-                    "Create one with a full-stretch RectTransform, an Image (or other Graphic) for the dim, " +
-                    "and a Button covering it for backdrop-tap dismissal. Modal windows will open without a " +
-                    "dimming/input-blocking backdrop until it exists.");
+                    $"ModalBackdropPresenter: nothing loaded at Addressables address '{BackdropPrefabAddress}'. " +
+                    "It should have been preloaded at startup; check that the prefab is marked Addressable " +
+                    "with that address and that AppEntryPoint still preloads it. Modal windows will open " +
+                    "without a dimming/input-blocking backdrop until it is there.");
             }
 
             return _cachedPrefab;
         }
 
-        private void WireBackdropDismiss(GameObject backdrop, WindowInstance topInstance)
+        private void WireBackdropDismiss(Backdrop backdrop, WindowInstance topInstance)
         {
-            var button = backdrop.GetComponent<Button>();
-            if (button == null)
+            if (backdrop.Button == null)
             {
-                Debug.LogWarning(
-                    $"ModalBackdropPresenter: prefab at '{BackdropPrefabResourcePath}' has no Button component - " +
-                    "backdrop-tap dismissal will not work.");
                 return;
             }
 
-            button.onClick.RemoveAllListeners();
-
-            if (topInstance.Definition.CloseOnBackdropClick)
+            if (backdrop.DismissHandler != null)
             {
-                var handle = topInstance.Handle;
-                button.onClick.AddListener(() => _closeByHandleAsync(handle).Forget());
+                backdrop.Button.onClick.RemoveListener(backdrop.DismissHandler);
+                backdrop.DismissHandler = null;
             }
+
+            if (!topInstance.Definition.CloseOnBackdropClick)
+            {
+                return;
+            }
+
+            var handle = topInstance.Handle;
+            backdrop.DismissHandler = () => _closeByHandleAsync(handle).Forget();
+            backdrop.Button.onClick.AddListener(backdrop.DismissHandler);
+        }
+
+        private sealed class Backdrop
+        {
+            public Backdrop(GameObject gameObject, Button button)
+            {
+                GameObject = gameObject;
+                Button = button;
+            }
+
+            public GameObject GameObject { get; }
+            public Button Button { get; }
+            public UnityAction DismissHandler { get; set; }
         }
     }
 }

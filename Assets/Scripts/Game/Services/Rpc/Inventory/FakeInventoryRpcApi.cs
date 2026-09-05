@@ -4,10 +4,6 @@ using PopupSystem.Game.Domain.Inventory;
 
 namespace PopupSystem.Game.Services.Rpc.Inventory
 {
-    /// <summary>
-    /// Local stand-in for the inventory-snapshot endpoint - see FakeRpcManager for why the whole
-    /// backend is faked out this way.
-    /// </summary>
     public sealed class FakeInventoryRpcApi : IInventoryRpcApi
     {
         public async UniTask<InventorySnapshot> GetInventorySnapshotAsync(CancellationToken cancellationToken)

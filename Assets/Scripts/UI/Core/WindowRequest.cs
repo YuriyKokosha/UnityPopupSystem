@@ -1,4 +1,4 @@
-using PopupSystem.UI.Enum;
+using PopupSystem.Contracts;
 
 namespace PopupSystem.UI.Core
 {

@@ -76,3 +76,6 @@ crashlytics-build.properties
 
 # VS Code
 .vscode/
+
+# macOS Finder metadata
+.DS_Store

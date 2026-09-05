@@ -1,7 +1,7 @@
 using System.Threading;
 using System;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Definitions;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime.Controller;
 
 namespace PopupSystem.UI.Runtime

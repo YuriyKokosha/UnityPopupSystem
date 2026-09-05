@@ -1,5 +1,6 @@
 using System;
 using PopupSystem.UI.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,10 +8,10 @@ namespace PopupSystem.UI.Windows.DailyReward
 {
     public sealed class DailyRewardWindowView : WindowView
     {
-        [SerializeField] private Text _titleText;
-        [SerializeField] private Text _descriptionText;
+        [SerializeField] private TMP_Text _titleText;
+        [SerializeField] private TMP_Text _descriptionText;
         [SerializeField] private Button _claimButton;
-        [SerializeField] private Text _claimButtonText;
+        [SerializeField] private TMP_Text _claimButtonText;
         [SerializeField] private Button _closeButton;
 
         public event Action ClaimClicked;

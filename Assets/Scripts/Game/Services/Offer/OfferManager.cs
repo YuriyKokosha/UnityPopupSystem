@@ -1,53 +1,64 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Game.Domain.Inventory;
 using PopupSystem.Game.Domain.Offer;
 using PopupSystem.Game.Domain.Rewards;
 using PopupSystem.Game.Services.Inventory;
 using PopupSystem.Game.Services.Rpc;
+using PopupSystem.Game.Services.Time;
 
 namespace PopupSystem.Game.Services.Offer
 {
     public sealed class OfferManager
     {
-        // Served when the remote config endpoint is unreachable, so a network hiccup degrades to
-        // generic-but-correct copy instead of a broken/empty offer popup.
         private static readonly OfferRemoteContent FallbackContent = new(
             "Special Offer",
             "A limited-time offer is available.",
             "Buy",
             bannerImageUrl: null);
 
+        private const string OfferId = "starter-offer";
+        private static readonly TimeSpan OfferDuration = TimeSpan.FromDays(7);
+
         private readonly PlayerInventoryManager _playerInventoryManager;
         private readonly IRpcManager _rpcManager;
+        private readonly ITimeProvider _timeProvider;
 
-        public OfferManager(PlayerInventoryManager playerInventoryManager, IRpcManager rpcManager)
+        private OfferData _offer;
+
+        public OfferManager(
+            PlayerInventoryManager playerInventoryManager,
+            IRpcManager rpcManager,
+            ITimeProvider timeProvider)
         {
             _playerInventoryManager = playerInventoryManager;
             _rpcManager = rpcManager;
+            _timeProvider = timeProvider;
+        }
+
+        public DateTime? NextActivityChangeUtc
+        {
+            get
+            {
+                var offer = GetOrCreateOffer();
+                var now = _timeProvider.UtcNow;
+
+                if (now < offer.StartsAtUtc)
+                {
+                    return offer.StartsAtUtc;
+                }
+
+                return now <= offer.EndsAtUtc ? offer.EndsAtUtc : null;
+            }
         }
 
         public OfferData GetActiveOfferData()
         {
-            var utcNow = DateTime.UtcNow;
-            var offer = new OfferData(
-                "starter-offer",
-                new[]
-                {
-                    new PopupSystem.Game.Domain.Inventory.InventoryResource("gems", 500),
-                    new PopupSystem.Game.Domain.Inventory.InventoryResource("energy", 50),
-                },
-                utcNow.AddDays(-1),
-                utcNow.AddDays(7));
-
-            return offer.IsActiveAt(utcNow) ? offer : null;
+            var offer = GetOrCreateOffer();
+            return offer.IsActiveAt(_timeProvider.UtcNow) ? offer : null;
         }
 
-        /// <summary>
-        /// Fetches this offer's presentation (title/description/banner) from the remote config
-        /// endpoint. Falls back to <see cref="FallbackContent"/> on any failure other than
-        /// cancellation, so a flaky/unreachable backend never leaves the popup blank.
-        /// </summary>
         public async UniTask<OfferRemoteContent> GetOfferContentAsync(OfferData offer, CancellationToken cancellationToken)
         {
             if (offer == null)
@@ -69,24 +80,45 @@ namespace PopupSystem.Game.Services.Offer
             }
         }
 
-        public async UniTask<RewardPopupData> PurchaseOfferAsync(OfferData offer)
+        public async UniTask<RewardPopupData> PurchaseOfferAsync(OfferData offer, CancellationToken cancellationToken)
         {
             if (offer == null)
             {
                 throw new InvalidOperationException("Offer data is required for purchase.");
             }
 
-            if (!offer.IsActiveAt(DateTime.UtcNow))
+            if (!offer.IsActiveAt(_timeProvider.UtcNow))
             {
                 throw new InvalidOperationException("Offer is no longer active.");
             }
 
-            await UniTask.Delay(500);
+            await UniTask.Delay(500, cancellationToken: cancellationToken);
             _playerInventoryManager.AddResources(offer.Rewards);
 
             return new RewardPopupData(
                 "Offer Purchased",
                 offer.Rewards);
+        }
+
+        private OfferData GetOrCreateOffer()
+        {
+            if (_offer != null)
+            {
+                return _offer;
+            }
+
+            var startUtc = _timeProvider.UtcNow;
+            _offer = new OfferData(
+                OfferId,
+                new[]
+                {
+                    new InventoryResource("gems", 500),
+                    new InventoryResource("energy", 50),
+                },
+                startUtc,
+                startUtc + OfferDuration);
+
+            return _offer;
         }
     }
 }

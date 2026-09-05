@@ -2,58 +2,87 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Contracts;
 using PopupSystem.Game.Domain.WindowQueue;
+using PopupSystem.Game.Services.Time;
 using PopupSystem.Game.Services.WindowQueue.Aggregators;
-using PopupSystem.UI.Core;
-using PopupSystem.UI.Enum;
-using PopupSystem.UI.Runtime;
-using PopupSystem.UI.Runtime.Manager;
 using UnityEngine;
 
 namespace PopupSystem.Game.Services.WindowQueue
 {
-    /// <summary>
-    /// Drives the priority queue: while the screen is idle, opens the highest-priority available
-    /// window. A window may either be waited out (default) or, if it opts in via
-    /// <see cref="WindowQueueInfo.AllowInterrupt"/>, force-closed and re-queued the moment a
-    /// strictly higher-priority window becomes available.
-    /// </summary>
-    public sealed class WindowQueueRunner
+    public sealed class WindowQueueRunner : IDisposable
     {
-        private const int IdleMonitorIntervalMs = 500;
-        private const int InterruptPollIntervalMs = 250;
+        private const int FallbackHeartbeatMs = 60_000;
+
+        private const int MinimumWaitMs = 16;
 
         private readonly WindowQueueManager _windowQueueManager;
         private readonly IWindowsManager _windowsManager;
+        private readonly ITimeProvider _timeProvider;
         private readonly Dictionary<WindowType, IWindowQueueAggregator> _aggregators;
+        private readonly List<IWindowQueueAggregator> _subscribedAggregators = new();
 
-        // Windows that already completed a full (non-interrupted) turn during the current burst.
-        // Without this, a window with CooldownSeconds == 0 that is still "available" (e.g. an
-        // unclaimed daily reward the player closed without claiming) would immediately win the
-        // next iteration of the loop below and starve every lower-priority window forever.
-        private readonly HashSet<WindowType> _shownThisBurst = new();
+        private readonly HashSet<WindowType> _presentedSinceAvailable = new();
+
+        private readonly HashSet<WindowType> _failedThisBurst = new();
 
         private CancellationTokenSource _monitorCts;
         private bool _isProcessing;
 
+        private UniTaskCompletionSource _wakeSource;
+        private bool _wakeRequested;
+
         public WindowQueueRunner(
             WindowQueueManager windowQueueManager,
             IWindowsManager windowsManager,
+            ITimeProvider timeProvider,
             List<IWindowQueueAggregator> aggregators)
         {
             _windowQueueManager = windowQueueManager;
             _windowsManager = windowsManager;
+            _timeProvider = timeProvider;
             _aggregators = new Dictionary<WindowType, IWindowQueueAggregator>();
 
             for (var i = 0; i < aggregators.Count; i++)
             {
                 _aggregators[aggregators[i].WindowType] = aggregators[i];
+
+                aggregators[i].AvailabilityChanged += Wake;
+                _subscribedAggregators.Add(aggregators[i]);
             }
+
+            _windowsManager.QueueBecameIdle += Wake;
+            _windowQueueManager.ItemsChanged += OnQueueItemsChanged;
+        }
+
+        public void Dispose()
+        {
+            StopIdleMonitoring();
+
+            for (var i = 0; i < _subscribedAggregators.Count; i++)
+            {
+                _subscribedAggregators[i].AvailabilityChanged -= Wake;
+            }
+
+            _subscribedAggregators.Clear();
+            _windowsManager.QueueBecameIdle -= Wake;
+            _windowQueueManager.ItemsChanged -= OnQueueItemsChanged;
         }
 
         public UniTask ShowAvailableWindowsAsync()
         {
             return ShowAvailableWindowsInternalAsync(default);
+        }
+
+        private void OnQueueItemsChanged()
+        {
+            _presentedSinceAvailable.RemoveWhere(IsNoLongerQueueable);
+            Wake();
+        }
+
+        private bool IsNoLongerQueueable(WindowType type)
+        {
+            return !_windowQueueManager.Contains(type);
         }
 
         public void StartIdleMonitoring()
@@ -77,12 +106,22 @@ namespace PopupSystem.Game.Services.WindowQueue
             _monitorCts.Cancel();
             _monitorCts.Dispose();
             _monitorCts = null;
+
+            Wake();
+        }
+
+        private void Wake()
+        {
+            _wakeRequested = true;
+            _wakeSource?.TrySetResult();
         }
 
         private async UniTaskVoid MonitorIdleAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                // try/catch inside the loop on purpose: an exception escaping one pass must not end
+                // idle monitoring, which would silently stop every future popup for the session.
                 try
                 {
                     if (_windowsManager.IsQueueIdle)
@@ -90,7 +129,7 @@ namespace PopupSystem.Game.Services.WindowQueue
                         await ShowAvailableWindowsInternalAsync(cancellationToken);
                     }
 
-                    await UniTask.Delay(IdleMonitorIntervalMs, cancellationToken: cancellationToken);
+                    await WaitForNextScanAsync(cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -98,13 +137,76 @@ namespace PopupSystem.Game.Services.WindowQueue
                 }
                 catch (Exception ex)
                 {
-                    // The try/catch lives INSIDE the loop on purpose: an exception escaping a
-                    // single tick must not end idle monitoring for the rest of the session - that
-                    // would silently stop every future popup (daily reward, offer, ...) from ever
-                    // appearing again, with no visible symptom beyond a console log.
                     Debug.LogException(ex);
                 }
             }
+        }
+
+        private async UniTask WaitForNextScanAsync(CancellationToken cancellationToken)
+        {
+            if (_wakeRequested)
+            {
+                _wakeRequested = false;
+                return;
+            }
+
+            var delayMs = Mathf.Max(MinimumWaitMs, NextScheduledWakeMs());
+            var source = new UniTaskCompletionSource();
+            _wakeSource = source;
+
+            try
+            {
+                await UniTask.WhenAny(
+                    source.Task,
+                    UniTask.Delay(delayMs, cancellationToken: cancellationToken));
+            }
+            finally
+            {
+                // Only if nobody has taken over: a stale waiter clearing the live one's source makes the next
+                // wake sleep out the full heartbeat.
+                if (ReferenceEquals(_wakeSource, source))
+                {
+                    _wakeSource = null;
+                    _wakeRequested = false;
+                }
+            }
+        }
+
+        private int NextScheduledWakeMs()
+        {
+            var soonest = TimeSpan.FromMilliseconds(FallbackHeartbeatMs);
+            var now = _timeProvider.UtcNow;
+            var items = _windowQueueManager.GetItemsSortedByPriority();
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+
+                var cooldown = _windowQueueManager.TimeUntilCooldownReady(item);
+                if (cooldown.HasValue && cooldown.Value < soonest)
+                {
+                    soonest = cooldown.Value;
+                }
+
+                if (!_aggregators.TryGetValue(item.WindowType, out var aggregator))
+                {
+                    continue;
+                }
+
+                var scheduled = aggregator.NextAvailabilityChangeUtc;
+                if (!scheduled.HasValue)
+                {
+                    continue;
+                }
+
+                var untilScheduled = scheduled.Value - now;
+                if (untilScheduled > TimeSpan.Zero && untilScheduled < soonest)
+                {
+                    soonest = untilScheduled;
+                }
+            }
+
+            return (int)soonest.TotalMilliseconds;
         }
 
         private async UniTask ShowAvailableWindowsInternalAsync(CancellationToken cancellationToken)
@@ -115,7 +217,7 @@ namespace PopupSystem.Game.Services.WindowQueue
             }
 
             _isProcessing = true;
-            _shownThisBurst.Clear();
+            _failedThisBurst.Clear();
 
             try
             {
@@ -138,26 +240,18 @@ namespace PopupSystem.Game.Services.WindowQueue
                     }
                     catch (Exception ex)
                     {
-                        // A single misbehaving window (bad config, a bug in its own Init) must
-                        // not take the rest of the queue down with it. Log it, count this item as
-                        // shown so it doesn't retry-loop for the rest of THIS burst, and move on -
-                        // it gets another chance on the next idle check in case the failure was
-                        // transient. Deliberately not calling MarkShown: that drives cooldown
-                        // timing, which should only advance for windows actually shown.
                         Debug.LogException(ex);
-                        _shownThisBurst.Add(item.WindowType);
+                        _failedThisBurst.Add(item.WindowType);
                         continue;
                     }
 
                     if (wasInterrupted)
                     {
-                        // Not marked shown and not added to _shownThisBurst: it stays eligible and
-                        // will be reconsidered right after the interrupting window closes.
                         continue;
                     }
 
                     _windowQueueManager.MarkShown(item);
-                    _shownThisBurst.Add(item.WindowType);
+                    _presentedSinceAvailable.Add(item.WindowType);
                 }
             }
             finally
@@ -166,12 +260,6 @@ namespace PopupSystem.Game.Services.WindowQueue
             }
         }
 
-        /// <summary>
-        /// Waits for the window to close on its own. If it opts into interruption, this races
-        /// that wait against a watcher for a strictly higher-priority window becoming available;
-        /// if the watcher wins, the window is force-closed and <c>true</c> is returned so the
-        /// caller knows not to treat this as a completed turn.
-        /// </summary>
         private async UniTask<bool> WaitForCloseOrInterruptAsync(
             WindowHandle handle,
             WindowQueueInfo currentItem,
@@ -188,16 +276,24 @@ namespace PopupSystem.Game.Services.WindowQueue
             var closeTask = WaitForNaturalCloseAsync(handle);
             var interruptTask = WatchForHigherPriorityAsync(currentItem.Priority, watchCts.Token);
 
-            var (winArgIndex, _, _) = await UniTask.WhenAny(closeTask, interruptTask);
+            var (winArgIndex, _, interruptWon) = await UniTask.WhenAny(closeTask, interruptTask);
             watchCts.Cancel();
 
-            if (winArgIndex == 1 && !handle.IsClosed)
+            Wake();
+
+            if (winArgIndex != 1 || !interruptWon || handle.IsClosed)
             {
-                await handle.CloseAsync();
-                return true;
+                return false;
             }
 
-            return false;
+            if (_windowsManager.HasOpenPopups)
+            {
+                await handle.WaitForCloseAsync();
+                return false;
+            }
+
+            await handle.CloseAsync();
+            return true;
         }
 
         private static async UniTask<bool> WaitForNaturalCloseAsync(WindowHandle handle)
@@ -217,7 +313,7 @@ namespace PopupSystem.Game.Services.WindowQueue
                         return true;
                     }
 
-                    await UniTask.Delay(InterruptPollIntervalMs, cancellationToken: cancellationToken);
+                    await WaitForNextScanAsync(cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -230,29 +326,18 @@ namespace PopupSystem.Game.Services.WindowQueue
         private bool HasHigherPriorityWindowReady(int currentPriority)
         {
             var items = _windowQueueManager.GetItemsSortedByPriority();
+            ReArmPresentedWindows(items);
 
             for (var i = 0; i < items.Count; i++)
             {
                 var candidate = items[i];
 
-                // Items are sorted by descending priority, so once we drop to currentPriority or
-                // below nothing further in the list can interrupt it either.
                 if (candidate.Priority <= currentPriority)
                 {
                     break;
                 }
 
-                if (_shownThisBurst.Contains(candidate.WindowType))
-                {
-                    continue;
-                }
-
-                if (!_aggregators.TryGetValue(candidate.WindowType, out var aggregator))
-                {
-                    continue;
-                }
-
-                if (aggregator.IsAvailable() && _windowQueueManager.IsCooldownReady(candidate))
+                if (IsEligible(candidate, out _))
                 {
                     return true;
                 }
@@ -264,22 +349,13 @@ namespace PopupSystem.Game.Services.WindowQueue
         private bool TryGetNextWindow(out WindowQueueInfo item, out IWindowData payload)
         {
             var items = _windowQueueManager.GetItemsSortedByPriority();
+            ReArmPresentedWindows(items);
 
             for (var i = 0; i < items.Count; i++)
             {
                 var currentItem = items[i];
 
-                if (_shownThisBurst.Contains(currentItem.WindowType))
-                {
-                    continue;
-                }
-
-                if (!_aggregators.TryGetValue(currentItem.WindowType, out var aggregator))
-                {
-                    continue;
-                }
-
-                if (!aggregator.IsAvailable() || !_windowQueueManager.IsCooldownReady(currentItem))
+                if (!IsEligible(currentItem, out var aggregator))
                 {
                     continue;
                 }
@@ -292,6 +368,61 @@ namespace PopupSystem.Game.Services.WindowQueue
             item = null;
             payload = null;
             return false;
+        }
+
+        private bool IsEligible(WindowQueueInfo item, out IWindowQueueAggregator aggregator)
+        {
+            aggregator = null;
+
+            if (_failedThisBurst.Contains(item.WindowType))
+            {
+                return false;
+            }
+
+            if (!_aggregators.TryGetValue(item.WindowType, out aggregator))
+            {
+                return false;
+            }
+
+            if (!aggregator.IsAvailable() || !_windowQueueManager.IsCooldownReady(item))
+            {
+                return false;
+            }
+
+            // Already had its turn and nothing re-armed it. CooldownSeconds == 0 means "no cooldown-driven
+            // repeat", not "repeat immediately".
+            return !_presentedSinceAvailable.Contains(item.WindowType);
+        }
+
+        private void ReArmPresentedWindows(IReadOnlyList<WindowQueueInfo> items)
+        {
+            if (_presentedSinceAvailable.Count == 0)
+            {
+                return;
+            }
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+
+                if (!_presentedSinceAvailable.Contains(item.WindowType))
+                {
+                    continue;
+                }
+
+                if (!_aggregators.TryGetValue(item.WindowType, out var aggregator))
+                {
+                    continue;
+                }
+
+                var becameUnavailable = !aggregator.IsAvailable();
+                var cooldownElapsed = item.CooldownSeconds > 0f && _windowQueueManager.IsCooldownReady(item);
+
+                if (becameUnavailable || cooldownElapsed)
+                {
+                    _presentedSinceAvailable.Remove(item.WindowType);
+                }
+            }
         }
     }
 }

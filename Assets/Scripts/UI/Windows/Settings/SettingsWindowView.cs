@@ -1,4 +1,5 @@
 using PopupSystem.UI.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,7 +8,7 @@ namespace PopupSystem.UI.Windows.Settings
     public sealed class SettingsWindowView : WindowView
     {
         [SerializeField] private Button _closeButton;
-        [SerializeField] private Text _statusLabel;
+        [SerializeField] private TMP_Text _statusLabel;
         [SerializeField] private GameObject _loadingState;
 
         public void SetStatus(string text)
@@ -28,8 +29,12 @@ namespace PopupSystem.UI.Windows.Settings
 
         private void Awake()
         {
-            _loadingState.SetActive(false);
-            _closeButton.onClick.AddListener(RequestClose);
+            SetLoading(false);
+
+            if (_closeButton != null)
+            {
+                _closeButton.onClick.AddListener(RequestClose);
+            }
         }
 
         private void OnDestroy()

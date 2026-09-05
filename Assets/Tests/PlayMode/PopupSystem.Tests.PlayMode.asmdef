@@ -1,0 +1,32 @@
+{
+    "name": "PopupSystem.Tests.PlayMode",
+    "rootNamespace": "PopupSystem.Tests.PlayMode",
+    "references": [
+        "PopupSystem.Contracts",
+        "PopupSystem.Core",
+        "PopupSystem.Game",
+        "PopupSystem.UI",
+        "UniTask",
+        "UniTask.Addressables",
+        "Unity.Addressables",
+        "Unity.ResourceManager",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Zenject",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

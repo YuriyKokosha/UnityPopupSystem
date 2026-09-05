@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -6,15 +7,12 @@ using UnityEngine.Networking;
 
 namespace PopupSystem.UI.Services
 {
-    /// <summary>
-    /// Downloads textures via <see cref="UnityWebRequest"/> for popups whose visual content is
-    /// not bundled with the app. Relative keys are resolved against a configurable base URL, so
-    /// this same class serves both a local demo source (StreamingAssets, wired up in
-    /// AppInstaller) and a real CDN in production - only the base URL changes.
-    /// </summary>
-    public sealed class RemoteImageLoader : IRemoteImageLoader
+    public sealed class RemoteImageLoader : IRemoteImageLoader, IDisposable
     {
+        private const int RequestTimeoutSeconds = 15;
+
         private readonly string _baseUrl;
+        private readonly Dictionary<string, Texture2D> _cache = new();
 
         public RemoteImageLoader(string baseUrl)
         {
@@ -30,24 +28,43 @@ namespace PopupSystem.UI.Services
 
             var url = ResolveUrl(relativeOrAbsoluteUrl);
 
-            using var request = UnityWebRequestTexture.GetTexture(url);
+            if (_cache.TryGetValue(url, out var cached) && cached != null)
+            {
+                return cached;
+            }
 
-            // Throws UnityWebRequestException on HTTP/transport failure, or OperationCanceledException
-            // if the window closes (and its lifetime token is cancelled) before the download finishes -
-            // both are expected and handled by the caller, not swallowed here.
+            using var request = UnityWebRequestTexture.GetTexture(url, nonReadable: true);
+            request.timeout = RequestTimeoutSeconds;
+
             await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
             var texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
             if (texture == null)
             {
-                // The request itself succeeded (no exception above), but the response body
-                // wasn't a decodable image - wrong content-type, corrupted file, etc. Treat that
-                // as a load failure too, rather than silently handing the caller a null texture
-                // it wasn't expecting.
                 throw new InvalidOperationException($"Downloaded image at '{url}' could not be decoded.");
             }
 
+            if (_cache.TryGetValue(url, out var published) && published != null)
+            {
+                UnityEngine.Object.Destroy(texture);
+                return published;
+            }
+
+            _cache[url] = texture;
             return texture;
+        }
+
+        public void Dispose()
+        {
+            foreach (var texture in _cache.Values)
+            {
+                if (texture != null)
+                {
+                    UnityEngine.Object.Destroy(texture);
+                }
+            }
+
+            _cache.Clear();
         }
 
         private string ResolveUrl(string relativeOrAbsoluteUrl)

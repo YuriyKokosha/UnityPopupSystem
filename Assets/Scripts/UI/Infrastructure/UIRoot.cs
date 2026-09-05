@@ -1,9 +1,9 @@
-using PopupSystem.UI.Enum;
+using PopupSystem.UI.Definitions;
 using UnityEngine;
 
 namespace PopupSystem.UI.Infrastructure
 {
-    public sealed class UIRoot : MonoBehaviour
+    public sealed class UIRoot : MonoBehaviour, IUILayerProvider
     {
         [SerializeField] private Transform _windowsLayer;
         [SerializeField] private Transform _popupsLayer;

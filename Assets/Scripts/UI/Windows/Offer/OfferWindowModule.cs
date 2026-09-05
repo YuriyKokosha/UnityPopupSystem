@@ -1,5 +1,5 @@
+using PopupSystem.Contracts;
 using PopupSystem.UI.Definitions;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime;
 using PopupSystem.UI.Runtime.Controller;
 using PopupSystem.UI.Transitions;
@@ -7,13 +7,9 @@ using Zenject;
 
 namespace PopupSystem.UI.Windows.Offer
 {
-    /// <summary>
-    /// Self-registering description of the Offer window - see IWindowModule for why this exists
-    /// instead of a case in a shared switch/dictionary.
-    /// </summary>
     public sealed class OfferWindowModule : IWindowModule
     {
-        private readonly DiContainer _container;
+        private readonly IFactory<OfferWindowController> _controllerFactory;
 
         public WindowDefinition Definition { get; } = new WindowDefinition(
             WindowType.Offer,
@@ -21,15 +17,14 @@ namespace PopupSystem.UI.Windows.Offer
             UILayerType.Windows,
             isModal: true,
             viewType: typeof(OfferWindowView),
-            prefabResourcePath: "UI/Windows/OfferWindow",
+            prefabAddress: "UI/Windows/OfferWindow",
             transition: SharedWindowTransitions.PopupDefault);
-            // Same reasoning as DailyReward: no closeOnBackdropClick for a monetization popup.
 
-        public OfferWindowModule(DiContainer container)
+        public OfferWindowModule(IFactory<OfferWindowController> controllerFactory)
         {
-            _container = container;
+            _controllerFactory = controllerFactory;
         }
 
-        public IWindowController CreateController() => _container.Instantiate<OfferWindowController>();
+        public IWindowController CreateController() => _controllerFactory.Create();
     }
 }

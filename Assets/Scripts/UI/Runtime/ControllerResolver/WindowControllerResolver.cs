@@ -1,15 +1,10 @@
 using System;
 using System.Collections.Generic;
-using PopupSystem.UI.Enum;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Runtime.Controller;
 
 namespace PopupSystem.UI.Runtime.ControllerResolver
 {
-    /// <summary>
-    /// Fully generic: it knows nothing about any specific window type. Every IWindowModule bound
-    /// in the installer (see AppInstaller) contributes one entry, keyed by its own
-    /// Definition.Type - adding a new window type never means touching this class.
-    /// </summary>
     public sealed class WindowControllerResolver : IWindowControllerResolver
     {
         private readonly Dictionary<WindowType, IWindowModule> _modulesByType;

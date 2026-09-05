@@ -1,6 +1,6 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using PopupSystem.UI.Core;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Runtime.Controller;
 
 namespace PopupSystem.UI.Windows.Settings

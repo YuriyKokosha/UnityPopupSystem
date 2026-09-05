@@ -1,9 +1,10 @@
+using System;
 using Cysharp.Threading.Tasks;
 using PopupSystem.App.States;
 
 namespace PopupSystem.App.Runtime
 {
-    public sealed class AppStateManager
+    public sealed class AppStateManager : IDisposable
     {
         private readonly AppInitState _appInitState;
         private readonly AppConnectServerState _connectServerState;
@@ -26,6 +27,19 @@ namespace PopupSystem.App.Runtime
             await ChangeStateAsync(_appInitState);
             await ChangeStateAsync(_connectServerState);
             await ChangeStateAsync(_mainGameState);
+        }
+
+        public void Dispose()
+        {
+            var state = _currentState;
+            if (state == null)
+            {
+                return;
+            }
+
+            _currentState = null;
+
+            state.ExitAsync().Forget();
         }
 
         private async UniTask ChangeStateAsync(IAppState nextState)

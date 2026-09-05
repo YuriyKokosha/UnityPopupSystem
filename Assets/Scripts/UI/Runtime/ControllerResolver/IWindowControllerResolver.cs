@@ -1,4 +1,4 @@
-using PopupSystem.UI.Enum;
+using PopupSystem.Contracts;
 using PopupSystem.UI.Runtime.Controller;
 
 namespace PopupSystem.UI.Runtime.ControllerResolver

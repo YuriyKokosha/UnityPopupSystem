@@ -1,12 +1,10 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using System.Linq;
+using PopupSystem.Contracts;
 using PopupSystem.Game.Services.Inventory;
 using PopupSystem.Game.Services.Profile;
-using PopupSystem.UI.Core;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime.Controller;
-using PopupSystem.UI.Runtime.Manager;
 
 namespace PopupSystem.UI.Windows.MainGame
 {

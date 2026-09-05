@@ -1,6 +1,6 @@
+using System;
+using PopupSystem.Contracts;
 using PopupSystem.Game.Services.Offer;
-using PopupSystem.UI.Core;
-using PopupSystem.UI.Enum;
 
 namespace PopupSystem.Game.Services.WindowQueue.Aggregators
 {
@@ -13,7 +13,11 @@ namespace PopupSystem.Game.Services.WindowQueue.Aggregators
             _offerManager = offerManager;
         }
 
+        public event Action AvailabilityChanged;
+
         public WindowType WindowType => WindowType.Offer;
+
+        public DateTime? NextAvailabilityChangeUtc => _offerManager.NextActivityChangeUtc;
 
         public bool IsAvailable()
         {

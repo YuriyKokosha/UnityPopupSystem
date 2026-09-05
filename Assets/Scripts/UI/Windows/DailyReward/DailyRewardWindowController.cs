@@ -1,11 +1,10 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Contracts;
 using PopupSystem.Extensions;
 using PopupSystem.Game.Services.DailyReward;
-using PopupSystem.UI.Core;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime.Controller;
-using PopupSystem.UI.Runtime.Manager;
 using PopupSystem.UI.Windows.RewardPopup;
 
 namespace PopupSystem.UI.Windows.DailyReward
@@ -31,10 +30,6 @@ namespace PopupSystem.UI.Windows.DailyReward
                 "Today you can claim a daily reward chest.",
                 "Claim");
 
-            // The view can be a pooled instance left over from a previous claim, where the
-            // button was disabled for the rest of that window's life (see OpenRewardPopupFlowAsync)
-            // and never re-enabled since the window closed right after. Restore a clean baseline
-            // on every Init rather than assuming a fresh view.
             View.SetActionInteractable(true);
             View.ClaimClicked += OnClaimClicked;
             return UniTask.CompletedTask;
@@ -63,28 +58,42 @@ namespace PopupSystem.UI.Windows.DailyReward
 
         private async UniTaskVoid OpenRewardPopupFlowAsync()
         {
-            View.SetActionInteractable(false);
+            var view = View;
+            var handle = Handle;
 
-            // Share() (not Preserve() - see UniTaskShareExtensions) lets both this method and
-            // RewardPopupController await the same claim concurrently: the popup opens right
-            // away and drives its own loading state from it, while this method still needs the
-            // outcome to restore the Claim button on failure.
-            var claimTask = _dailyRewardManager.ClaimRewardAsync().Share();
+            view.SetActionInteractable(false);
+
+            // CancellationToken.None deliberately: a claim is a transaction, and the player closing the window
+            // must not abandon it half-applied. Share() lets the popup await the same claim concurrently.
+            var claimTask = _dailyRewardManager.ClaimRewardAsync(CancellationToken.None).Share();
             var rewardPopup = await _windowsManager.OpenAsync(WindowType.RewardPopup, new RewardPopupRequest(claimTask));
 
             try
             {
                 await claimTask;
             }
+            catch (OperationCanceledException)
+            {
+                _isClaimInProgress = false;
+                return;
+            }
             catch
             {
-                View.SetActionInteractable(true);
+                if (!handle.IsClosed)
+                {
+                    view.SetActionInteractable(true);
+                }
+
                 _isClaimInProgress = false;
                 throw;
             }
 
             await rewardPopup.WaitForCloseAsync();
-            await Handle.CloseAsync();
+
+            if (!handle.IsClosed)
+            {
+                await handle.CloseAsync();
+            }
         }
     }
 }

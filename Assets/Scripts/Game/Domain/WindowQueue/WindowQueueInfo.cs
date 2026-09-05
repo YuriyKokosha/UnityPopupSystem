@@ -1,4 +1,4 @@
-using PopupSystem.UI.Enum;
+using PopupSystem.Contracts;
 
 namespace PopupSystem.Game.Domain.WindowQueue
 {
@@ -8,10 +8,6 @@ namespace PopupSystem.Game.Domain.WindowQueue
         public int Priority { get; }
         public float CooldownSeconds { get; }
 
-        /// <summary>
-        /// Whether a higher-priority queued window is allowed to interrupt (force-close) this
-        /// one while it is being shown. When false, this window can only ever be waited for.
-        /// </summary>
         public bool AllowInterrupt { get; }
 
         public WindowQueueInfo(WindowType windowType, int priority, float cooldownSeconds, bool allowInterrupt = true)

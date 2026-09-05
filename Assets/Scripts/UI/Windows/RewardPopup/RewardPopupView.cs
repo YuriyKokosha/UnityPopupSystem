@@ -1,4 +1,5 @@
 using PopupSystem.UI.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,8 +8,8 @@ namespace PopupSystem.UI.Windows.RewardPopup
     public sealed class RewardPopupView : WindowView
     {
         [SerializeField] private Button _closeButton;
-        [SerializeField] private Text _titleLabel;
-        [SerializeField] private Text _rewardLabel;
+        [SerializeField] private TMP_Text _titleLabel;
+        [SerializeField] private TMP_Text _rewardLabel;
         [SerializeField] private GameObject _loadingState;
 
         public void SetTitle(string text)

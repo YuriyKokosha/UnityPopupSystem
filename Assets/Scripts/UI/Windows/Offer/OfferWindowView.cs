@@ -1,5 +1,6 @@
 using System;
 using PopupSystem.UI.Runtime;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,14 +8,12 @@ namespace PopupSystem.UI.Windows.Offer
 {
     public sealed class OfferWindowView : WindowView
     {
-        [SerializeField] private Text _titleText;
-        [SerializeField] private Text _descriptionText;
+        [SerializeField] private TMP_Text _titleText;
+        [SerializeField] private TMP_Text _descriptionText;
         [SerializeField] private Button _buyButton;
-        [SerializeField] private Text _buyButtonText;
+        [SerializeField] private TMP_Text _buyButtonText;
         [SerializeField] private Button _closeButton;
 
-        // Remote-sourced promo banner: exactly one of "showing the downloaded image",
-        // "loading", or "fallback" is active at any time.
         [SerializeField] private RawImage _bannerImage;
         [SerializeField] private GameObject _bannerLoadingIndicator;
         [SerializeField] private GameObject _bannerFallback;
@@ -41,19 +40,12 @@ namespace PopupSystem.UI.Windows.Offer
                 _closeButton.onClick.RemoveListener(RequestClose);
             }
 
-            ReleaseBannerTexture();
+            DetachBannerTexture();
         }
 
-        /// <summary>
-        /// This view is pooled rather than destroyed on close (see WindowFactory) - the
-        /// downloaded banner texture is the one piece of state a fresh OfferWindowController
-        /// wouldn't otherwise clear before its own load replaces it, so without this the pooled
-        /// instance would briefly show the *previous* offer's banner underneath the "Loading
-        /// banner..." indicator the next time it's reused.
-        /// </summary>
         internal override void ResetForPool()
         {
-            ReleaseBannerTexture();
+            DetachBannerTexture();
 
             if (_bannerImage != null)
             {
@@ -68,13 +60,12 @@ namespace PopupSystem.UI.Windows.Offer
             SetBannerLoading(false);
         }
 
-        private void ReleaseBannerTexture()
+        // Detach, never destroy: RemoteImageLoader owns the texture and hands the same one to the
+        // next window that asks for that URL. Clearing is still needed - this view is pooled.
+        private void DetachBannerTexture()
         {
-            if (_bannerImage != null && _bannerImage.texture != null)
+            if (_bannerImage != null)
             {
-                // This texture was downloaded for this instance alone - nothing else references
-                // it, so it must be destroyed here or it leaks for the life of the process.
-                Destroy(_bannerImage.texture);
                 _bannerImage.texture = null;
             }
         }

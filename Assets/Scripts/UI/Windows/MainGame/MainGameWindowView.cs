@@ -1,5 +1,6 @@
 using PopupSystem.UI.Runtime;
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,9 +10,9 @@ namespace PopupSystem.UI.Windows.MainGame
     {
         [SerializeField] private Image _backgroundImage;
         [SerializeField] private Image _panelImage;
-        [SerializeField] private Text _titleText;
-        [SerializeField] private Text _playerText;
-        [SerializeField] private Text _balancesText;
+        [SerializeField] private TMP_Text _titleText;
+        [SerializeField] private TMP_Text _playerText;
+        [SerializeField] private TMP_Text _balancesText;
         [SerializeField] private Button _settingsButton;
 
         public event Action SettingsClicked;

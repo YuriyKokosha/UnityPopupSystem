@@ -1,9 +1,8 @@
 using System;
 using Cysharp.Threading.Tasks;
+using PopupSystem.Contracts;
 using PopupSystem.Game.Services.WindowQueue;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Preloader;
-using PopupSystem.UI.Runtime.Manager;
 using UnityEngine;
 
 namespace PopupSystem.App.States
@@ -36,9 +35,6 @@ namespace PopupSystem.App.States
             }
             catch (Exception ex)
             {
-                // A failure showing the very first automatic popup must not prevent idle
-                // monitoring from starting below - that would silently stop every future popup
-                // for the rest of the session, not just this first one.
                 Debug.LogException(ex);
             }
 

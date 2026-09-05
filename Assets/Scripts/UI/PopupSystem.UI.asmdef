@@ -1,0 +1,25 @@
+{
+    "name": "PopupSystem.UI",
+    "rootNamespace": "PopupSystem.UI",
+    "references": [
+        "PopupSystem.Contracts",
+        "PopupSystem.Core",
+        "PopupSystem.Game",
+        "UniTask",
+        "UniTask.Addressables",
+        "Unity.Addressables",
+        "Unity.ResourceManager",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Zenject"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

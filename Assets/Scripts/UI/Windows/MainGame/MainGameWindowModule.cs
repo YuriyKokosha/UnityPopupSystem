@@ -1,18 +1,14 @@
+using PopupSystem.Contracts;
 using PopupSystem.UI.Definitions;
-using PopupSystem.UI.Enum;
 using PopupSystem.UI.Runtime;
 using PopupSystem.UI.Runtime.Controller;
 using Zenject;
 
 namespace PopupSystem.UI.Windows.MainGame
 {
-    /// <summary>
-    /// Self-registering description of the MainGame window - see IWindowModule for why this
-    /// exists instead of a case in a shared switch/dictionary.
-    /// </summary>
     public sealed class MainGameWindowModule : IWindowModule
     {
-        private readonly DiContainer _container;
+        private readonly IFactory<MainGameWindowController> _controllerFactory;
 
         public WindowDefinition Definition { get; } = new WindowDefinition(
             WindowType.MainGame,
@@ -20,15 +16,14 @@ namespace PopupSystem.UI.Windows.MainGame
             UILayerType.Windows,
             isModal: false,
             viewType: typeof(MainGameWindowView),
-            prefabResourcePath: "UI/Windows/MainGameWindow");
-            // No transition: it's the persistent base screen, not a popup - it should just be
-            // there, not animate in.
+            prefabAddress: "UI/Windows/MainGameWindow",
+            isBaseScreen: true);
 
-        public MainGameWindowModule(DiContainer container)
+        public MainGameWindowModule(IFactory<MainGameWindowController> controllerFactory)
         {
-            _container = container;
+            _controllerFactory = controllerFactory;
         }
 
-        public IWindowController CreateController() => _container.Instantiate<MainGameWindowController>();
+        public IWindowController CreateController() => _controllerFactory.Create();
     }
 }
