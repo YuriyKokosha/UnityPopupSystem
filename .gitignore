@@ -79,3 +79,10 @@ crashlytics-build.properties
 
 # macOS Finder metadata
 .DS_Store
+
+# The one scratch folder in the project: UI kit render proofs (Tools/UI Kit/Render prefab
+# writes into Claude outputs/UIKit/Renders/), agent downloads, one-off exports
+/Claude outputs/
+
+# Local Claude Code overrides; the repo-level skill under .claude/skills/ stays tracked
+.claude/settings.local.json

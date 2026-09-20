@@ -23,7 +23,8 @@ namespace PopupSystem.Tests.PlayMode
         {
             // Deliberately no EventSystem or input module: StandaloneInputModule reads legacy UnityEngine.Input,
             // which throws every frame under the Input System package.
-            _root = new GameObject("TestUIRoot", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            _root = new GameObject(
+                "TestUIRoot", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
 
             var canvas = _root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;

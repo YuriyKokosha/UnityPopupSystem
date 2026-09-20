@@ -1,0 +1,191 @@
+{
+  "style": "G - Lagoon Gold",
+  "reference": "1080x1920, Pixels Per Unit 100, sprite sizes are 1:1 with the mockup",
+  "borderOrder": "left, bottom, right, top - Unity order (Vector4 spriteBorder)",
+  "tintMath": {
+    "body": "tint",
+    "bevel": "tint x0.78",
+    "shadow": "tint x0.50"
+  },
+  "fonts": {
+    "display": "Lilita One",
+    "body": "Nunito"
+  },
+  "palette": {
+    "stage": "#0E5C8C",
+    "stageCard": "#0B4F7C",
+    "frameOuter": "#0A4468",
+    "gold": "#EFC24E",
+    "goldLight": "#FFE39B",
+    "ring": "#FFEDC4",
+    "cream": "#FFF6E3",
+    "creamCard": "#F7E9CC",
+    "cta": "#E29A1F",
+    "ctaPressed": "#CC8813",
+    "ctaInk": "#3A2A16",
+    "blue": "#0F6FA8",
+    "ink": "#3A2A16",
+    "inkMuted": "#7A6642",
+    "disabledFill": "#5E5A50",
+    "disabledInk": "#E7E1D3",
+    "backdrop": "#052133 @ 72%"
+  },
+  "sprites": {
+    "panel_9s.png": {
+      "size": "160x160",
+      "border_LBRT": [
+        56,
+        56,
+        56,
+        56
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "whole window body: frame #0A4468 10px, gold #EFC24E 6px, cream #FFF6E3"
+    },
+    "card_9s.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        34,
+        34,
+        34,
+        34
+      ],
+      "spriteMode": "Single",
+      "tint": "#F7E9CC",
+      "note": "cards inside the panel; same sprite tinted #0B4F7C when used on the stage"
+    },
+    "chip_9s.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        44,
+        44,
+        44,
+        44
+      ],
+      "spriteMode": "Single",
+      "tint": "#0B4F7C",
+      "note": "balance badges, timer chip, the gold rule under a title"
+    },
+    "btn_pill.png": {
+      "size": "220x140",
+      "border_LBRT": [
+        74,
+        0,
+        74,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#E29A1F / pressed #CC8813 / disabled #5E5A50",
+      "note": "fixed height 140 (132 body + 8 shadow), stretches horizontally only"
+    },
+    "btn_round_body.png": {
+      "size": "96x104",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#0A4468",
+      "note": "close and settings; the ring is a separate Image on top"
+    },
+    "btn_round_ring.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#FFEDC4",
+      "note": "6px ring around a round button"
+    },
+    "icon_close.png": {
+      "size": "64x64",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#FFFFFF",
+      "note": "close cross"
+    },
+    "icon_settings.png": {
+      "size": "64x64",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#FFEDC4",
+      "note": "settings gear"
+    },
+    "icon_chest.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#FFE39B",
+      "note": "reward chest"
+    },
+    "spinner_ring.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#E29A1F",
+      "note": "270 degree arc, meant to be spun by rotating the RectTransform, not by an animated sprite"
+    },
+    "icon_coin.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "coin, colours baked in"
+    },
+    "icon_gem.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "gem, colours baked in"
+    },
+    "banner_fallback.png": {
+      "size": "512x256",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "shown when the remote offer banner fails to load"
+    }
+  }
+}

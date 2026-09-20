@@ -91,6 +91,7 @@ The design choices below are direct answers to that:
 | Memory/perf: pooling, cached lookups | `WindowFactory` view pooling, `IUiPrefabProvider` handle caching, texture cleanup on pool reset, an event-driven queue that sleeps instead of polling |
 | Robustness: error handling, valid state under load | Retry loop on connect, per-popup try/catch in the queue runner, remote-config fallback content |
 | Testing of the queue/priority system | `Assets/Tests/EditMode/` + `Assets/Tests/PlayMode/` (`Docs/feature-maps/tests.md`) |
+| A consistent look across every window | one generated sprite set + one palette (`Docs/feature-maps/ui-atlas.md`) |
 | Demonstration scene with a mix of priorities/sources | `Assets/Scenes/MainScene.unity` |
 
 ## Project structure
@@ -108,13 +109,21 @@ Assets/
                                                              -> PopupSystem.UI
     Extensions/ small cross-layer utilities (e.g. UniTask.Share())
                                                              -> PopupSystem.Core
-  Content/UI/     window content prefabs + the modal backdrop/preloader prefabs, Addressable group "UI"
+  Content/UI/     window content prefabs + the modal backdrop/preloader prefabs, Addressable group "UI";
+                  Sprites/ (the UI kit's atlas sources) and Fonts/ (Lilita One + Nunito, TMP assets)
+  Editor/UiKit/   sprite/atlas and font tooling, under the Tools/UI Kit menu -> PopupSystem.EditorTools
   Scenes/         MainScene.unity — the demo
   Tests/EditMode/ the queue/priority system, against fakes (tests.md)
   Tests/PlayMode/ the window engine, against real prefabs on a real canvas (tests.md)
   Zenject/        vendored Extenject source, in its own Zenject/Zenject.Editor assemblies
+Tools/ui-atlas/   the sprite generator and the logo's vector source — the UI sprites are drawn in
+                  code, so a palette change is one edit plus a re-run (ui-atlas.md)
 CLAUDE.md         full technical brief for AI-assisted or new-engineer onboarding
 Docs/feature-maps/*.md   one detailed map per module, linked from CLAUDE.md
+Docs/knowledge-base/*.md engine- and library-level knowledge that holds across modules
+Docs/mockups/     the UI kit's mockups as PNGs, exported from the design canvas
+Docs/ci/          the GameCI workflow, written but not yet wired up
+.claude/skills/ui-kit/   the UI kit as an actionable checklist, for whoever builds the next window
 ```
 
 ## Tech stack

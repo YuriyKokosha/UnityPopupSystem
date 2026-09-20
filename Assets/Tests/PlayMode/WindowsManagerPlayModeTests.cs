@@ -145,7 +145,8 @@ namespace PopupSystem.Tests.PlayMode
 
             Assert.That(windowCanvas, Is.Not.Null, "Window prefabs carry their own Canvas.");
             Assert.That(popupCanvas, Is.Not.Null);
-            Assert.That(windowCanvas.overrideSorting, Is.True, "UILayerSorter turns sibling order into an explicit sortingOrder.");
+            Assert.That(windowCanvas.overrideSorting, Is.True,
+                "UILayerSorter turns sibling order into an explicit sortingOrder.");
             Assert.That(popupCanvas.overrideSorting, Is.True);
 
             Assert.That(windowCanvas.sortingOrder, Is.GreaterThan(_ui.GetLayerSortingOrder(UILayerType.Windows)));

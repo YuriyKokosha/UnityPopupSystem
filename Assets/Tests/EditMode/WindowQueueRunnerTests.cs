@@ -323,7 +323,8 @@ namespace PopupSystem.Tests.EditMode
             await offerHandle.CloseAsync();
 
             var dailyOpened = await WaitUntilAsync(() => _windowsManager.OpenCalls.Count >= 2);
-            Assert.That(dailyOpened, Is.True, "The deferred higher-priority window should open once the popup-owning window closes.");
+            Assert.That(dailyOpened, Is.True,
+                "The deferred higher-priority window should open once the popup-owning window closes.");
             Assert.That(_windowsManager.OpenCalls[1].Type, Is.EqualTo(WindowType.DailyReward));
 
             await _windowsManager.OpenCalls[1].Handle.CloseAsync();

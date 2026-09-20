@@ -8,6 +8,7 @@ namespace PopupSystem.UI.Preloader
     public sealed class PreloaderOverlayView : MonoBehaviour
     {
         [SerializeField] private TMP_Text _messageText;
+        [SerializeField] private GameObject _progressBar;
         [SerializeField] private Image _progressFill;
         [SerializeField] private Button _retryButton;
 
@@ -38,6 +39,7 @@ namespace PopupSystem.UI.Preloader
                 _messageText.text = message;
             }
 
+            SetErrorVisible(false);
             gameObject.SetActive(true);
         }
 
@@ -48,20 +50,13 @@ namespace PopupSystem.UI.Preloader
                 _messageText.text = message;
             }
 
-            if (_retryButton != null)
-            {
-                _retryButton.gameObject.SetActive(true);
-            }
-
+            SetErrorVisible(true);
             gameObject.SetActive(true);
         }
 
         public void HideError()
         {
-            if (_retryButton != null)
-            {
-                _retryButton.gameObject.SetActive(false);
-            }
+            SetErrorVisible(false);
         }
 
         private void OnRetryClicked()
@@ -86,6 +81,22 @@ namespace PopupSystem.UI.Preloader
         public void Hide()
         {
             gameObject.SetActive(false);
+        }
+
+        // The bar and the Retry button share one slot in the layout, so exactly one of
+        // them may be on at a time - otherwise they draw on top of each other and the
+        // column's height changes with the state.
+        private void SetErrorVisible(bool isVisible)
+        {
+            if (_retryButton != null)
+            {
+                _retryButton.gameObject.SetActive(isVisible);
+            }
+
+            if (_progressBar != null)
+            {
+                _progressBar.SetActive(!isVisible);
+            }
         }
     }
 }

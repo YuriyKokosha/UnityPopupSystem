@@ -1,0 +1,60 @@
+<!doctype html>
+<!--
+  PopupSystem preloader logo, concept A "Stacked panels".
+  Source of truth for Assets/Content/UI/Sprites/logo_lockup.png.
+
+  Re-export with Tools/ui-atlas/logo/render_logo.py: it opens this file in headless
+  Chromium at 3x, screenshots with a transparent background, crops to the real alpha
+  bounds and downscales. Do not crop to the element box - Lilita One overshoots its
+  line box, so a box crop shaves the wordmark.
+
+  Needs LilitaOne-Regular.ttf from Assets/Content/UI/Fonts/Lilita_One/.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PopupSystem logo lockup</title>
+<style>
+  @font-face {
+    font-family: 'Lilita One';
+    src: url('../../../Assets/Content/UI/Fonts/Lilita_One/LilitaOne-Regular.ttf') format('truetype');
+  }
+  html, body { margin: 0; background: transparent; }
+  .lockup {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    /* Padding is slack for the alpha crop, not part of the lockup. */
+    padding: 40px;
+  }
+  .wordmark {
+    font-family: 'Lilita One', cursive;
+    font-size: 58px;
+    letter-spacing: 1px;
+    /* 1.0 clips the caps; the crop takes the slack back off. */
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="lockup">
+  <!--
+    viewBox is the drawing's own bounds (x 40..296 including the 8 px stroke,
+    y 18..224), so the mark centres on the wordmark instead of on the artboard.
+  -->
+  <svg width="288" height="232" viewBox="36 14 264 214" fill="none">
+    <rect x="96" y="18" width="200" height="104" rx="26" fill="#0A4468"></rect>
+    <rect x="72" y="52" width="216" height="112" rx="28" fill="#C99A22"></rect>
+    <rect x="72" y="46" width="216" height="112" rx="28" fill="#EFC24E"></rect>
+    <rect x="44" y="96" width="248" height="128" rx="32" fill="#8A5A08"></rect>
+    <rect x="44" y="88" width="248" height="128" rx="32" fill="#FFF6E3" stroke="#EFC24E" stroke-width="8"></rect>
+    <rect x="80" y="124" width="120" height="14" rx="7" fill="#E29A1F"></rect>
+    <rect x="80" y="156" width="176" height="10" rx="5" fill="#E4D6BC"></rect>
+    <rect x="80" y="180" width="140" height="10" rx="5" fill="#E4D6BC"></rect>
+  </svg>
+  <div class="wordmark"><span style="color: #FFF6E3;">Popup</span><span style="color: #EFC24E;">System</span></div>
+</div>
+</body>
+</html>

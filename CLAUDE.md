@@ -186,6 +186,23 @@ new popup types... without modifying the core engine"). Steps:
    Addressable in the `UI` group, and give it the address `UI/Windows/<Feature>Window` — that
    address is what goes in the `WindowDefinition`. There is no code-built fallback: an address that
    does not resolve is a hard `InvalidOperationException`.
+   - **Style it from the kit, do not invent one.** Every visual in this project comes from the
+     Lagoon Gold set: the sprites in `Assets/Content/UI/Sprites/` (panel, card, chip, pill button,
+     round button, icons), the palette tokens, and the layout rules — panel sized explicitly, no
+     `LayoutGroup`, `Image.color = white` with the state carried by `Button.colors`, the close
+     button at `(1, 1)` with the measured numbers. `Docs/feature-maps/ui-atlas.md` is the
+     reference, `Docs/mockups/` holds the mockups as PNGs (exported from the "PopupSystem UI Kit"
+     design canvas, which stays the source of truth). A new sprite means
+     editing `Tools/ui-atlas/generate_sprites.py` and re-running it, never a hand-painted PNG
+     dropped into the folder.
+   - After touching sprites or fonts, run `Tools/UI Kit/Configure sprites and build atlas` and
+     `Tools/UI Kit/Build fonts and apply`. The first one forces `spriteMode = Single`, which
+     renames sprite sub-assets and silently breaks any `Image` still pointing at the old name — a
+     white quad, no error. Re-render and look at the result before calling it done: select the
+     prefab and run `Tools/UI Kit/Render prefab`, which writes a 1080x1920 PNG into
+     `Claude outputs/UIKit/Renders/`. It builds its camera and canvas in a throwaway additive scene and
+     closes that scene in a `finally`, so a render that fails half-way cannot leave objects in the
+     scene you have open — do not hand-build a render harness in `MainScene` again.
 4. Bind the new `IWindowModule` in `AppInstaller.InstallBindings()`, and bind its controller with
    `Container.BindIFactory<...Controller>().To<...Controller>()` next to the other four.
 5. If this window should appear automatically via the priority queue (rather than only by a direct
@@ -328,7 +345,9 @@ This is an assessment build, not a production client. Before building further on
   in-memory and resets on relaunch), no localization, no analytics/telemetry hooks.
 - **CI exists but is not wired up.** The GameCI workflow is written and sits in `Docs/ci/`; it has
   to be moved to `.github/workflows/` and given a `UNITY_LICENSE` secret before a single run
-  happens. No automated build pipeline, no `.editorconfig`/analyzer ruleset checked in.
+  happens. No automated build pipeline either. `.editorconfig` is checked in (formatting, the
+  naming rules the codebase already follows, and `CA2016`/`CS4014` raised to warnings), but nothing
+  enforces it outside the IDE: there is no analyzer package and no format check in CI.
 - **There is no boot fixture.** The PlayMode suites build their own world; nothing loads
   `MainScene` and asserts the app reaches its main screen, because loading the scene would start
   the queue mid-test. That is the largest remaining hole in coverage.
@@ -350,8 +369,8 @@ This is an assessment build, not a production client. Before building further on
 - **Zenject is still vendored source** under `Assets/Zenject` rather than a package; it has its own
   asmdefs now, but updating it is still a manual copy.
 - **`com.unity.ai.assistant` is in the manifest on purpose**, not left over from the template. It is
-  the bridge an external agent drives this editor through — the tests and Play Mode checks recorded
-  in `Docs/implementation-review.md` were run that way. It is an editor-only tool with no runtime
+  the bridge an external agent drives this editor through — the tests and Play Mode checks for this
+  project were run that way. It is an editor-only tool with no runtime
   code behind it and nothing in `Assets/Scripts` references it; a build that shipped this project
   would drop it, and that is the only reason to.
 
@@ -398,3 +417,17 @@ flows through them, and the decisions specific to that subsystem.
 - [`windows.md`](Docs/feature-maps/windows.md) — the five concrete windows built on the engine.
 - [`tests.md`](Docs/feature-maps/tests.md) — the EditMode/PlayMode split, what each suite covers,
   and how to extend either.
+- [`ui-atlas.md`](Docs/feature-maps/ui-atlas.md) — the Lagoon Gold UI kit: the sprite set and how
+  it is generated, the atlas, 9-slice borders, fonts, the layout rules every window prefab follows,
+  and the preloader.
+
+`Docs/mockups/` — the UI kit's mockups as PNGs, exported from the "PopupSystem UI Kit" design
+canvas so the visual reference travels with the repository: the `G · Lagoon Gold` style sheet, the
+Unity spec board, the seven screen boards, the preloader and the logo concepts. Look at them before
+composing a new screen; `Docs/mockups/README.md` says what each one is and how to re-export.
+
+There is also one repository-level skill, `.claude/skills/ui-kit/SKILL.md` — the same kit as a
+checklist an agent can act from: palette, sprite table, prefab rules, the three `Tools/UI Kit` menu
+items, the failures that are silent, and the render-and-measure step that has to close the loop.
+`ui-atlas.md` is the reasoning, the skill is the procedure. When they disagree, the feature map is
+the older of the two.

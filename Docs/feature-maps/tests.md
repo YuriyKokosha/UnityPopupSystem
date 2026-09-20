@@ -87,7 +87,7 @@ backend and the clock are faked, because those are the seams whose behaviour a t
 | Fixture | Subject |
 |---|---|
 | `WindowsManagerPlayModeTests` | The engine itself. Because the provider is the real one, this is also the only automated check that the addresses in the `WindowDefinition`s actually resolve — and the honest answer to the fake-drift criticism of the EditMode suite: nothing here is faked, so nothing here can drift. |
-| `WindowFlowPlayModeTests` | The concrete window controllers' flows: claim, purchase, remote content, and what each does when the thing it is waiting for fails or arrives too late. These flows are exactly where the runtime defects in `Docs/review-response.md` §4 lived. |
+| `WindowFlowPlayModeTests` | The concrete window controllers' flows: claim, purchase, remote content, and what each does when the thing it is waiting for fails or arrives too late. These flows are exactly where the runtime defects found in review lived. |
 | `RemoteImageLoaderPlayModeTests` | The real `RemoteImageLoader` against the real StreamingAssets file the demo serves its offer banner from — the same "remote" endpoint `AppInstaller` wires up. PlayMode because `UnityWebRequest` needs the player loop, and because the point is that the download actually happens. |
 
 `TestUiHierarchy` is the shared world: a code-built copy of `MainScene`'s `UIRoot`, implementing

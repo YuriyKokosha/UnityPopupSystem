@@ -8,6 +8,7 @@ namespace PopupSystem.UI.Windows.RewardPopup
     public sealed class RewardPopupView : WindowView
     {
         [SerializeField] private Button _closeButton;
+        [SerializeField] private Button _okButton;
         [SerializeField] private TMP_Text _titleLabel;
         [SerializeField] private TMP_Text _rewardLabel;
         [SerializeField] private GameObject _loadingState;
@@ -34,12 +35,24 @@ namespace PopupSystem.UI.Windows.RewardPopup
             {
                 _loadingState.SetActive(isVisible);
             }
+
+            // OK dismisses the popup, so it stays disabled until the reward has actually arrived.
+            // The close cross is left alone: the player must always be able to walk away.
+            if (_okButton != null)
+            {
+                _okButton.interactable = !isVisible;
+            }
         }
 
         private void Awake()
         {
             SetLoading(false);
             _closeButton.onClick.AddListener(RequestClose);
+
+            if (_okButton != null)
+            {
+                _okButton.onClick.AddListener(RequestClose);
+            }
         }
 
         private void OnDestroy()
@@ -47,6 +60,11 @@ namespace PopupSystem.UI.Windows.RewardPopup
             if (_closeButton != null)
             {
                 _closeButton.onClick.RemoveListener(RequestClose);
+            }
+
+            if (_okButton != null)
+            {
+                _okButton.onClick.RemoveListener(RequestClose);
             }
         }
     }

@@ -12,7 +12,8 @@ namespace PopupSystem.UI.Runtime.Controller
         protected TView View { get; private set; }
         protected WindowHandle Handle { get; private set; }
 
-        public async UniTask InitializeAsync(WindowView view, WindowHandle handle, IWindowData payload, CancellationToken cancellationToken)
+        public async UniTask InitializeAsync(WindowView view, WindowHandle handle, IWindowData payload,
+            CancellationToken cancellationToken)
         {
             View = view as TView ?? throw new InvalidOperationException(
                 $"Expected view of type {typeof(TView).Name}, got {view.GetType().Name}");

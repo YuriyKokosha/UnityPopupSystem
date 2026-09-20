@@ -33,5 +33,10 @@ log says so explicitly, so a first-time failure here is not a mystery.
   not hide the state of the other.
 - Caches `Library/`, keyed on the contents of `Assets/`, `Packages/` and `ProjectSettings/`. A cold
   run reimports every asset in the project, which is the slow part of Unity CI.
+  **Expect the exact key to miss almost always**: `hashFiles('Assets/**')` covers every script, so
+  any code change invalidates it. The `restore-keys` below it (`Library-<mode>-`, then `Library-`)
+  are what actually carry the cache between runs - a near-hit rather than a cold reimport. If the
+  partial restores prove too stale, narrow the key to `Packages/**` + `ProjectSettings/**`, which
+  change rarely and are what decide whether the import result is reusable at all.
 - Pins `unityVersion: 6000.3.12f1`, the version this project is on.
 - Uploads the NUnit result XML as an artifact on both success and failure.
