@@ -32,7 +32,8 @@ window's screen — a remote-config fetch, a banner download, an open transition
 away is a genuine reason to stop.
 
 **`CancellationToken.None` is right for a transaction**, and this is deliberate at two call sites
-(`DailyRewardWindowController.ClaimRewardAsync`, `OfferWindowController.PurchaseOfferAsync`). The
+(`DailyRewardWindowController` calling `DailyRewardManager.ClaimRewardAsync`, `OfferWindowController`
+calling `OfferManager.PurchaseOfferAsync`). The
 tidy-looking move is to pass the same token every other async call in the method uses. It would be
 wrong: cancelling a claim because the player closed the window means a backend that already granted
 the reward and a client that never recorded it — or a payment taken for something the player never
@@ -43,9 +44,11 @@ What a real client would pass here is an **app-lifetime token**, so that quittin
 wait. This build has no such scope, and inventing one for two call sites would be worse than
 recording the reasoning.
 
-The managers take the token anyway, because that method is the seam a real backend implementation
-replaces and an HTTP call needs one. If cancellation does arrive, the claim is all-or-nothing:
-nothing is applied until the call itself has gone through. The opposite — cooldown started, nothing
+The managers take the token anyway, because that method is where a real backend call would go and
+an HTTP call needs one. Today it wraps only a simulated delay before a local mutation — there is no
+purchase/claim RPC yet ([`../feature-maps/game-services.md`](../feature-maps/game-services.md)). If
+cancellation does arrive, the claim is all-or-nothing: nothing is applied until the (simulated) call
+itself has gone through. The opposite — cooldown started, nothing
 granted — is the shape of bug report nobody can reproduce.
 
 **A non-cancellable token is mandatory on the close path.** `WindowsManager` awaits
@@ -73,13 +76,13 @@ is user-visible:
 
 ## `async void`, `.Forget()` and fire-and-forget
 
-Startup used to run as `async void`, which made a failure anywhere in the boot chain unobservable:
-a missing prefab or a broken installer binding threw into nobody, leaving the player on whatever
-happened to be on screen with nothing in the log tying it to startup. Booting is exactly where a
+Startup must not run as `async void`: that makes a failure anywhere in the boot chain unobservable —
+a missing prefab or a broken installer binding throws into nobody, leaving the player on whatever
+happens to be on screen with nothing in the log tying it to startup. Booting is exactly where a
 failure has to be loud, because everything diagnosed afterwards depends on knowing the app never
 finished starting.
 
-`AppEntryPoint.Initialize()` (Zenject's `IInitializable`, synchronous by contract) now calls a
+`AppEntryPoint.Initialize()` (Zenject's `IInitializable`, synchronous by contract) calls a
 `UniTaskVoid` with a real try/catch: cancellation is silent, anything else is logged as an error
 naming startup. That is the general pattern — `async void` never appears in this codebase; a
 genuine fire-and-forget call site uses `.Forget()` on a `UniTaskVoid` that handles its own

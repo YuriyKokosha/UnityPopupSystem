@@ -7,6 +7,7 @@ using PopupSystem.UI.Core;
 using PopupSystem.UI.Definitions;
 using PopupSystem.UI.Infrastructure;
 using PopupSystem.UI.Runtime.Content;
+using PopupSystem.UI.Runtime.Controller;
 using PopupSystem.UI.Runtime.ControllerResolver;
 using PopupSystem.UI.Runtime.Registry;
 using Zenject;
@@ -45,19 +46,64 @@ namespace PopupSystem.UI.Runtime.Factory
             var definition = _registry.Get(request.Type);
             var parent = _layerProvider.GetLayer(definition.Layer);
             var view = await AcquireViewAsync(definition, request.Type, parent, cancellationToken);
-            var controller = _controllerResolver.Create(definition.Type);
-            var lifetimeCts = new CancellationTokenSource();
 
-            view.SetTransition(definition.Transition);
+            IWindowController controller = null;
+            CancellationTokenSource lifetimeCts = null;
+            try
+            {
+                controller = _controllerResolver.Create(definition.Type);
+                lifetimeCts = new CancellationTokenSource();
 
-            view.Hide();
+                view.SetTransition(definition.Transition);
 
-            return new WindowInstance(request.Type, definition, view, controller, lifetimeCts);
+                view.Hide();
+
+                return new WindowInstance(request.Type, definition, view, controller, lifetimeCts);
+            }
+            catch
+            {
+                // The view is acquired and nobody owns it yet: hand it back, or a fresh one stays on screen and a
+                // pooled one is lost from the pool.
+                DiscardUnownedParts(request.Type, view, controller, lifetimeCts);
+                throw;
+            }
         }
 
         public void Release(WindowInstance instance)
         {
-            var view = instance.View;
+            ReturnView(instance.Type, instance.View);
+        }
+
+        private void DiscardUnownedParts(
+            WindowType type,
+            WindowView view,
+            IWindowController controller,
+            CancellationTokenSource lifetimeCts)
+        {
+            lifetimeCts?.Dispose();
+
+            // Logged, not thrown: the caller must see the original failure, not a cleanup one.
+            try
+            {
+                controller?.Dispose();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+
+            try
+            {
+                ReturnView(type, view);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
+
+        private void ReturnView(WindowType type, WindowView view)
+        {
             if (view == null)
             {
                 return;
@@ -72,10 +118,10 @@ namespace PopupSystem.UI.Runtime.Factory
                 return;
             }
 
-            if (!_pooledViews.TryGetValue(instance.Type, out var stack))
+            if (!_pooledViews.TryGetValue(type, out var stack))
             {
                 stack = new Stack<WindowView>();
-                _pooledViews[instance.Type] = stack;
+                _pooledViews[type] = stack;
             }
 
             if (stack.Count >= MaxPooledViewsPerType)

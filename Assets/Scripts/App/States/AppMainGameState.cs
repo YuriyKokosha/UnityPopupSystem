@@ -33,6 +33,12 @@ namespace PopupSystem.App.States
             {
                 await _windowQueueRunner.ShowAvailableWindowsAsync();
             }
+            catch (OperationCanceledException)
+            {
+                // The window engine was disposed under the startup burst (scene unload, quit). Not an error, and
+                // there is nothing left to monitor: let the cancellation end startup quietly (AppEntryPoint).
+                throw;
+            }
             catch (Exception ex)
             {
                 Debug.LogException(ex);

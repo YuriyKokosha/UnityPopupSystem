@@ -25,9 +25,10 @@ frames; the screens are 1080x1920, the same reference resolution the prefabs use
 
 Two notes that live on the canvas and are worth carrying here:
 
-- The **Offer · loading** board is a known defect, not a target: the controller puts an empty string
-  on the button while the content loads, so it stays amber and clickable. It should be disabled and
-  labelled.
+- The **Offer · loading** board does not match the build: it shows the Buy button empty, amber and
+  clickable while the content loads. The build disables it and shows "Loading...", which is the
+  intended behaviour. Re-export the board the next time the canvas is touched; until then, the code
+  (`OfferWindowController`) is the reference for that state.
 - The rejected palette directions (Candy Chest, Royal Velvet, Sunny Pop, Deep Sea, Lagoon Light,
   Deep Marine, Soft Harbor) are not exported — they are exploration, and the kit is the Lagoon Gold
   sheet above. They are still on the canvas if a direction ever has to be revisited.

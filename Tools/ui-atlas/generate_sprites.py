@@ -117,6 +117,12 @@ spec("btn_pill.png", "220x140", [74, 0, 74, 0], "Single",
      "#E29A1F / pressed #CC8813 / disabled #5E5A50",
      "fixed height 140 (132 body + 8 shadow), stretches horizontally only")
 
+beveled(160, 72, 66, 33, 10, "btn_pill_small.png")
+spec("btn_pill_small.png", "160x72", [40, 0, 40, 0], "Single",
+     "#E29A1F / pressed #CC8813 / disabled #5E5A50",
+     "small action inside a card (inventory Use/Drop); fixed height 72 (66 body + 6 shadow), "
+     "stretches horizontally only - chip_9s at 40px high collapsed into an oval")
+
 beveled(96, 104, 96, 48, 14, "btn_round_body.png")
 spec("btn_round_body.png", "96x104", [0, 0, 0, 0], "Single", "#0A4468",
      "close and settings; the ring is a separate Image on top")
@@ -196,6 +202,149 @@ d.ellipse([196 * SS, 94 * SS, 218 * SS, 116 * SS], fill=INK_SOFT + (255,))
 save(img, "banner_fallback.png")
 spec("banner_fallback.png", "512x256", [0, 0, 0, 0], "Single", "white",
      "shown when the remote offer banner fails to load")
+
+# -- 14-19. reward icons: energy + inventory items, colours baked in ------------
+# Same rule as coin and gem: an icon that means one thing has its colours drawn in, a white master
+# is only for chrome that changes state. Flat two-tone fills with a darker rim, no ink outline, so
+# they sit on cream cards and on the blue stage alike. Items are 128x128 (they fill a 236x216 cell),
+# the energy icon is 96x96 next to coin and gem. Each one is addressable by the address the item
+# catalog carries (UI/Items/<Name>) or UI/Currencies/<currencyId> - see ui-atlas.md.
+ENERGY = (255, 206, 62)
+ENERGY_DARK = (214, 138, 18)
+STEEL = (226, 234, 240)
+STEEL_DARK = (150, 168, 184)
+WOOD = (156, 92, 44)
+WOOD_DARK = (112, 62, 26)
+WOOD_LIGHT = (188, 120, 62)
+RED = (218, 70, 58)
+RED_DARK = (160, 40, 34)
+RED_LIGHT = (240, 116, 96)
+GLASS = (234, 246, 251)
+GLASS_EDGE = (150, 192, 214)
+STONE = (140, 144, 156)
+STONE_DARK = (104, 108, 120)
+STONE_LIGHT = (176, 180, 190)
+INK = (58, 42, 22)
+
+
+def poly(d, pts, fill):
+    d.polygon([(x * SS, y * SS) for x, y in pts], fill=fill + (255,))
+
+
+def ell(d, box, fill):
+    x0, y0, x1, y1 = box
+    d.ellipse([x0 * SS, y0 * SS, x1 * SS, y1 * SS], fill=fill + (255,))
+
+
+def rotated(img, degrees, size):
+    """Rotates a supersampled canvas about its centre and crops it back to size x size."""
+    r = img.rotate(degrees, resample=Image.BICUBIC, expand=False)
+    off = (r.width - size * SS) // 2
+    return r.crop((off, off, off + size * SS, off + size * SS))
+
+
+# energy: a bolt
+img, d = new(96, 96)
+bolt = [(60, 4), (16, 54), (44, 54), (34, 92), (80, 38), (52, 38), (66, 4)]
+poly(d, [(x + 2, y + 3) for x, y in bolt], ENERGY_DARK)
+poly(d, bolt, ENERGY)
+poly(d, [(60, 4), (66, 4), (52, 38), (46, 38)], (255, 232, 140))
+save(img, "icon_energy.png")
+spec("icon_energy.png", "96x96", [0, 0, 0, 0], "Single", "white", "energy bolt, colours baked in")
+
+# sword: drawn upright on a larger canvas, then turned 45 degrees so the tip points top-right
+img, d = new(170, 170)
+cx = 85
+poly(d, [(cx, 10), (cx + 11, 26), (cx + 11, 112), (cx - 11, 112), (cx - 11, 26)], STEEL_DARK)
+poly(d, [(cx, 10), (cx, 112), (cx - 11, 112), (cx - 11, 26)], STEEL)
+rr(d, (cx - 32, 110, cx + 32, 124), 7, GOLD_DARK + (255,))
+rr(d, (cx - 30, 110, cx + 30, 120), 6, GOLD + (255,))
+rr(d, (cx - 7, 122, cx + 7, 148), 4, WOOD_DARK + (255,))
+rr(d, (cx - 7, 122, cx + 2, 148), 4, WOOD + (255,))
+ell(d, (cx - 11, 144, cx + 11, 166), GOLD_DARK)
+ell(d, (cx - 9, 145, cx + 8, 162), GOLD)
+save(rotated(img, -45, 128), "item_sword.png")
+spec("item_sword.png", "128x128", [0, 0, 0, 0], "Single", "white", "Sword (UI/Items/Sword)")
+
+# health potion: a round flask, red liquid, cork
+img, d = new(128, 128)
+rr(d, (51, 12, 77, 30), 5, WOOD_DARK + (255,))
+rr(d, (51, 12, 70, 28), 5, WOOD + (255,))
+rr(d, (48, 28, 80, 38), 5, GLASS_EDGE + (255,))
+rr(d, (53, 34, 75, 56), 3, GLASS_EDGE + (255,))
+rr(d, (57, 34, 71, 58), 2, GLASS + (255,))
+ell(d, (22, 46, 106, 124), GLASS_EDGE)
+ell(d, (27, 51, 101, 119), GLASS)
+liquid = Image.new("L", (128 * SS, 128 * SS), 0)
+ImageDraw.Draw(liquid).ellipse([29 * SS, 53 * SS, 99 * SS, 117 * SS], fill=255)
+band = Image.new("L", (128 * SS, 128 * SS), 0)
+ImageDraw.Draw(band).rectangle([0, 76 * SS, 128 * SS, 128 * SS], fill=255)
+liquid = Image.composite(liquid, Image.new("L", liquid.size, 0), band)
+img.alpha_composite(layer(128, 128, RED, liquid))
+shade = Image.new("L", (128 * SS, 128 * SS), 0)
+ImageDraw.Draw(shade).ellipse([29 * SS, 53 * SS, 99 * SS, 117 * SS], fill=255)
+cut = Image.new("L", (128 * SS, 128 * SS), 0)
+ImageDraw.Draw(cut).ellipse([22 * SS, 40 * SS, 94 * SS, 112 * SS], fill=255)
+shade = Image.composite(Image.new("L", shade.size, 0), shade, cut)
+shade = Image.composite(shade, Image.new("L", shade.size, 0), band)
+img.alpha_composite(layer(128, 128, RED_DARK, shade))
+d = ImageDraw.Draw(img)
+ell(d, (36, 72, 92, 82), RED_LIGHT)
+ell(d, (38, 60, 52, 76), WHITE)
+save(img, "item_potion.png")
+spec("item_potion.png", "128x128", [0, 0, 0, 0], "Single", "white", "Health Potion (UI/Items/HealthPotion)")
+
+
+def arrow_canvas():
+    a, ad = new(170, 170)
+    c = 85
+    rr(ad, (c - 4, 46, c + 4, 138), 3, WOOD + (255,))
+    rr(ad, (c - 4, 46, c, 138), 2, WOOD_LIGHT + (255,))
+    poly(ad, [(c, 24), (c + 12, 50), (c - 12, 50)], STEEL_DARK)
+    poly(ad, [(c, 24), (c, 50), (c - 12, 50)], STEEL)
+    poly(ad, [(c - 4, 114), (c - 15, 124), (c - 15, 146), (c - 4, 136)], RED)
+    poly(ad, [(c + 4, 114), (c + 15, 124), (c + 15, 146), (c + 4, 136)], RED_DARK)
+    return a
+
+
+# arrows: two arrows crossed
+img = Image.new("RGBA", (128 * SS, 128 * SS), (0, 0, 0, 0))
+img.alpha_composite(rotated(arrow_canvas(), 28, 128))
+img.alpha_composite(rotated(arrow_canvas(), -28, 128))
+save(img, "item_arrows.png")
+spec("item_arrows.png", "128x128", [0, 0, 0, 0], "Single", "white", "Arrows (UI/Items/Arrows)")
+
+# chest: wood body and lid, gold trim and lock
+img, d = new(128, 128)
+rr(d, (10, 58, 118, 116), 10, WOOD_DARK + (255,))
+rr(d, (10, 58, 118, 108), 10, WOOD + (255,))
+rr(d, (10, 22, 118, 64), 20, WOOD_DARK + (255,))
+rr(d, (10, 22, 118, 58), 20, WOOD_LIGHT + (255,))
+for x in (26, 94):
+    rr(d, (x - 6, 22, x + 6, 116), 4, GOLD_DARK + (255,))
+    rr(d, (x - 6, 22, x + 3, 114), 3, GOLD + (255,))
+rr(d, (10, 56, 118, 66), 3, GOLD_DARK + (255,))
+rr(d, (10, 56, 118, 63), 3, GOLD + (255,))
+rr(d, (51, 48, 77, 82), 6, GOLD_DARK + (255,))
+rr(d, (51, 48, 77, 78), 6, GOLD + (255,))
+ell(d, (59, 56, 69, 66), INK)
+poly(d, [(62, 62), (66, 62), (67, 72), (61, 72)], INK)
+save(img, "item_chest.png")
+spec("item_chest.png", "128x128", [0, 0, 0, 0], "Single", "white", "Chest (UI/Items/Chest)")
+
+# ore: a rock with gold veins
+img, d = new(128, 128)
+rock = [(14, 92), (24, 50), (54, 26), (92, 32), (116, 66), (108, 104), (64, 116), (26, 110)]
+poly(d, rock, STONE_DARK)
+poly(d, [(14, 92), (24, 50), (54, 26), (92, 32), (116, 66), (98, 90), (60, 100), (24, 100)], STONE)
+poly(d, [(24, 50), (54, 26), (92, 32), (72, 52), (40, 58)], STONE_LIGHT)
+for box in ((44, 64, 64, 80), (74, 58, 90, 72), (60, 84, 74, 96), (30, 76, 42, 86)):
+    x0, y0, x1, y1 = box
+    ell(d, (x0, y0 + 2, x1, y1 + 2), GOLD_DARK)
+    ell(d, box, GOLD)
+    ell(d, (x0 + 3, y0 + 2, x0 + (x1 - x0) * 0.5, y0 + (y1 - y0) * 0.45), (255, 236, 170))
+save(img, "item_ore.png")
+spec("item_ore.png", "128x128", [0, 0, 0, 0], "Single", "white", "Ore (UI/Items/Ore)")
 
 manifest = {
     "style": "G - Lagoon Gold",

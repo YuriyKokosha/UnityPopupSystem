@@ -1,6 +1,6 @@
 # UI atlas (style G - Lagoon Gold)
 
-The sprite set all five windows are built from, and the rules behind it.
+The sprite set all six windows are built from, and the rules behind it.
 The mockups are exported to [`../mockups/`](../mockups/) - the `G - Lagoon Gold` sheet, the Unity
 spec board and the seven screen boards - so the reference travels with the repository. They come
 from the Design canvas "PopupSystem UI Kit", which stays the source of truth (and still holds the
@@ -11,18 +11,19 @@ rejected palette directions); `../mockups/README.md` says how to re-export a boa
 | Path | What it is |
 |---|---|
 | `Docs/mockups/` | the canvas boards as PNGs: the style sheet, the Unity specs, the seven screens |
-| `Assets/Content/UI/Sprites/` | 14 PNGs; no Addressables group touches them - the atlas pulls them in |
+| `Assets/Content/UI/Sprites/` | 21 PNGs (20 generated, plus `logo_lockup`); no Addressables group touches them - the atlas pulls them in |
 | `Assets/Content/UI/UI.spriteatlasv2` | the atlas, packed from that folder as a whole |
 | `Assets/Content/UI/Fonts/` | Lilita One and Nunito plus the TMP SDF assets built from them |
-| `Assets/Editor/UiKit/` | editor tooling in its own assembly: sprite/atlas setup, font setup and the off-screen prefab renderer, all three under `Tools/UI Kit` |
+| `Assets/Editor/UiKit/` | editor tooling in its own assembly: sprite/atlas setup, font setup, the off-screen prefab renderer and the reward-icon and inventory builders, all under `Tools/UI Kit` (`/Icons`, `/Inventory` submenus) |
 | `Tools/ui-atlas/generate_sprites.py` | PNG generator (Pillow); the sprites are drawn in code |
 | `Tools/ui-atlas/logo/` | the logo lockup: its vector source and the script that rasterises it |
 | `Claude outputs/UIKit/Renders/` | scratch proofs written by `Tools/UI Kit/Render prefab`; nothing reads them, and the folder is gitignored |
 
 The sprites are generated rather than hand-painted, so a palette change is a change
-to a few constants plus a re-run, not a repaint of fourteen files.
+to a few constants plus a re-run, not a repaint of twenty files.
 Run: `python3 Tools/ui-atlas/generate_sprites.py Assets/Content/UI` - it writes the
-PNGs into `Sprites/` next to it and refreshes `atlas-manifest.json`.
+PNGs into `Sprites/` under that folder and writes `atlas-manifest.json` next to `Sprites/`, i.e.
+into the output folder (`Assets/Content/UI/`), not into `Tools/ui-atlas/`.
 
 `logo_lockup.png` is the exception: it is type, so it cannot be drawn in Pillow. It is
 SVG plus a Lilita One wordmark in `Tools/ui-atlas/logo/logo_lockup.html`, rasterised by
@@ -45,6 +46,7 @@ Borders are given in Unity order - **left, bottom, right, top**.
 | `card_9s` | 96x96 | 34, 34, 34, 34 | `#F7E9CC` | cards inside the panel; same sprite tinted `#0B4F7C` on the stage |
 | `chip_9s` | 96x96 | 44, 44, 44, 44 | `#0B4F7C` | balance badges, timer chip, the gold rule under a title |
 | `btn_pill` | 220x140 | 74, 0, 74, 0 | `#E29A1F` / `#CC8813` / `#5E5A50` | the primary button, all three states |
+| `btn_pill_small` | 160x72 | 40, 0, 40, 0 | same tints | a small action inside a card (the inventory cell's `Use`/`Drop`); 66 body + 6 shadow, horizontal-only like `btn_pill` |
 | `btn_round_body` | 96x104 | - | `#0A4468` | round close and settings buttons |
 | `btn_round_ring` | 96x96 | - | `#FFEDC4` | the ring around a round button, as its own Image |
 | `icon_close` | 64x64 | - | `#FFFFFF` | close cross |
@@ -53,13 +55,63 @@ Borders are given in Unity order - **left, bottom, right, top**.
 | `spinner_ring` | 96x96 | - | `#E29A1F` | 270 degree arc |
 | `icon_coin` | 96x96 | - | white | coin, colours baked in |
 | `icon_gem` | 96x96 | - | white | gem, colours baked in |
+| `icon_energy` | 96x96 | - | white | energy bolt, colours baked in |
+| `item_sword` `item_potion` `item_arrows` `item_chest` `item_ore` | 128x128 | - | white | inventory items, colours baked in |
 | `banner_fallback` | 512x256 | - | white | placeholder for the remote offer banner |
 | `logo_lockup` | 346x321 | - | white | the preloader logo; colours baked in, not drawn by the generator |
 
+## Reward icons (currencies and items)
+
+Every currency and every item is drawn as an icon, never as its id or name: the balances on
+`MainGame`, the inventory cells, the reward row of `DailyReward`, `Offer` and `RewardPopup`. The
+sprites are coloured like `icon_coin`/`icon_gem` (an icon that means one thing has its colours
+drawn in; white masters are for chrome that changes state), flat two-tone with a darker rim and no
+ink outline, so they read on the cream card and on the blue stage. Items are 128x128 because a
+cell shows them at 104; `icon_energy` is 96x96 next to coin and gem.
+
+**Addresses, not references.** Each icon sprite is Addressable in the `UI` group
+(`Tools/UI Kit/Icons/Mark icon sprites addressable`):
+
+| Sprite | Address | Who asks for it |
+|---|---|---|
+| `icon_coin` / `icon_gem` / `icon_energy` | `UI/Currencies/gold` / `gems` / `energy` | `RewardIcons.CurrencyAddress(id)` — a currency has no config of its own, so the address is a convention |
+| `item_sword` / `item_potion` / `item_arrows` / `item_chest` / `item_ore` | `UI/Items/Sword` / `HealthPotion` / `Arrows` / `Chest` / `Ore` | `ItemDefinition.IconAddress`, from the item catalog (remote config) |
+
+That is why the prefabs hold no icon sprites: the item set comes from config, so the art has to be
+looked up by the address config carries. A new item is a sprite in the generator, one line in
+`UiKitRewardIconsBuilder.IconAddresses`, and a catalog entry — no window changes.
+
+**Runtime.** `IUiIconProvider` / `AddressablesUiIconProvider` (`UI/Runtime/Content/`) loads a
+`Sprite` by address with the same handle rules as the prefab provider (deduplicated, held for the
+session, released on `Dispose`, a failure not cached). `RewardIcons` (`UI/Services/`) sits on top:
+`Preload*Async` loads what a window is about to show and **logs, not throws**, for a missing icon;
+`Describe*` is synchronous and only reads what is loaded. A controller awaits the preload once in
+`OnInitializeAsync` and then redraws on every `Changed` without awaiting. A missing icon degrades
+to its old text — the entry's `Fallback` label (the item name, the currency id) takes the icon's
+place — so a content mistake shows up as a word on screen, not as a blank.
+
+**The row.** `IconAmountStripView` (`UI/Runtime/Widgets/`) is a centred row of `IconAmountView`
+entries laid out in code: fixed entry width, fixed spacing, no `LayoutGroup`, entries pooled from a
+hidden template. The entry's children are `Icon`, `Amount` (Lilita) and `Fallback` (Nunito) —
+deliberately not `Label`, which `Build fonts and apply` would turn into the display face. The rows
+and their numbers live in `UiKitRewardIconsBuilder` (`Tools/UI Kit/Icons/Add icon rows to
+windows`, idempotent), and `Tools/UI Kit/Icons/Render icon screens` renders all of them plus a
+missing-icon case and Offer in landscape:
+
+| Window | Where | Entry | Icon | Amount |
+|---|---|---|---|---|
+| MainGame | inside `BalancesCard` | horizontal, 230 wide | 64 | 38 pt ink |
+| RewardPopup | `RewardStrip` at -140, 118 high; `RewardLabel` stays for the error sentence at 30 pt Nunito | vertical, 140 | 72 | 34 pt dark-on-cream |
+| DailyReward | `RewardCard` (the static "Chest x1" is gone), caption on top | vertical, 150 | 80 | 34 pt ink |
+| Offer | new `RewardCard` at -650 under a two-line description; panel 900 → 960, Buy at -786 | vertical, 150 | 64 | 32 pt ink |
+
+Amounts are formatted by `RewardIcons.FormatAmount` (`12 480`, a space as the thousands
+separator); item lines carry `x{count}`.
+
 ## Three decisions worth knowing before editing
 
-**White masters instead of coloured copies.** Everything except the panel, the coin,
-the gem and the banner placeholder is drawn white and tinted at runtime. The bevel and
+**White masters instead of coloured copies.** Everything except the panel, the currency and
+item icons, the banner placeholder and the logo is drawn white and tinted at runtime. The bevel and
 the drop shadow are baked as lightness rather than as separate colours: body = 100 % of
 the tint, bevel = 78 %, shadow = 50 %. So `default`, `pressed` and `disabled` are one
 texture and three colour values, and changing the accent needs no new PNG. The trade-off:
@@ -70,10 +122,13 @@ mockup - if that matters, give it its own child Image with an alpha of its own.
 and 8 the drop shadow. The top and bottom borders are deliberately zero: set them and Unity
 stretches the bevel band along with the body, and the volume falls apart. That means the
 button height in a prefab is fixed at 140. A button of a different height is a second
-sprite, not a different `sizeDelta`.
+sprite, not a different `sizeDelta` — which is exactly what `btn_pill_small` (72 high) is. It was
+added for the inventory cells after a first cut on `chip_9s` at 40 px high came out as an oval: the
+chip's 44 px borders are taller than the rect, and the 9-slice squashes them (the same trap the
+preloader's progress bar avoided, below).
 
 **Textures are uncompressed.** `TextureImporterCompression.Uncompressed`, `maxTextureSize 512`,
-mips off. Across thirteen sprites this size that is cheaper than ASTC artefacts on flat fills
+mips off. Across twenty-one sprites this size that is cheaper than ASTC artefacts on flat fills
 and on the gold frame. The atlas itself is packed as `CompressedHQ` - the assembled page is
 compressed, not every source file.
 
@@ -94,23 +149,24 @@ identically named `SpriteAtlasAsset` methods are obsolete and silently do nothin
 `IncludeInBuild = true` is a deliberate prototype compromise: the atlas lands both in the main
 build and in the Addressables dependencies, so the data is duplicated. Production would mark the
 atlas itself Addressable and turn `IncludeInBuild` off, but then sprite loading becomes async and
-has to be awaited before the first window is shown. With five windows and a single atlas page,
+has to be awaited before the first window is shown. With six windows and a single atlas page,
 the duplication is cheaper than that asynchrony.
 
-Verified on this project: the atlas is packed, it holds 13 sprites, and the 9-slice borders reach
-`Sprite.border` (`panel_9s` -> 56/56/56/56, `btn_pill` -> 74/0/74/0).
+Verified on this project: the atlas is packed, and the 9-slice borders reach `Sprite.border`
+(`panel_9s` -> 56/56/56/56, `btn_pill` -> 74/0/74/0). It packs the whole `Sprites/` folder, so the
+packed count must equal the `sprites` table in `Tools/ui-atlas/atlas-manifest.json`; re-check both the
+count and the borders after adding or regenerating sprites.
 
 ## Rendering a prefab to look at it
 
 `Tools/UI Kit/Render prefab` (`UiKitPrefabRenderer`) renders the selected prefab asset to a
-1080x1920 PNG in `Claude outputs/UIKit/Renders/`. Every alignment claim in this kit that was reasoned
-about turned out wrong at least once, so the render is how a layout claim gets closed.
+1080x1920 PNG in `Claude outputs/UIKit/Renders/`. An alignment claim that is only reasoned about is
+not reliable, so the render is how a layout claim gets closed.
 
-It exists as a menu item rather than as a throwaway command script because of how it used to fail.
-The harness was written fresh each time, it built its camera and canvas in whatever scene was open
-- `MainScene` - and any exception before the cleanup line left the camera, the canvas and an
-instantiated window sitting in that scene as unsaved changes. The only way back was to reopen the
-scene without saving.
+It is a menu item rather than a throwaway command script because an ad-hoc harness builds its
+camera and canvas in whatever scene is open - `MainScene` - and any exception before its cleanup
+line leaves the camera, the canvas and an instantiated window sitting in that scene as unsaved
+changes, recoverable only by reopening the scene without saving.
 
 What the tool does about that, in order:
 
@@ -148,15 +204,16 @@ comparing two full-screen crops of differently sized panels is misleading.
 
 ## Window prefabs
 
-The five prefabs in `Assets/Content/UI/Windows/` are rebuilt on these sprites. The hierarchy is
+The six prefabs in `Assets/Content/UI/Windows/` are built on these sprites (`InventoryWindow` is
+generated by `UiKitInventoryWindowBuilder`). The hierarchy is
 unchanged (`Root -> Background -> Panel -> ...`), so every `[SerializeField]` reference on the
 views survived - checked, zero broken.
 
 Layout rules:
 
 - The panel is `panel_9s` with `Image.type = Sliced`, anchored to the centre of the screen, with an
-  explicit size: MainGame 920x560, Settings 860x360, DailyReward 860x680, Offer 860x900,
-  RewardPopup 700x460.
+  explicit size: MainGame 920x560, Settings 860x360, DailyReward 860x680, Offer 860x960,
+  RewardPopup 700x460, Inventory 860x1148 (clamped to the screen in landscape).
 - Blocks inside a panel are placed top-down from a 34 px inset: title, gold rule, cards, CTA. No
   `LayoutGroup` anywhere - positions are explicit so the view pool does not rebuild the layout on
   every open.
@@ -175,17 +232,16 @@ Layout rules:
   88 x 95.33 because `btn_round_body` carries 8 px of drop shadow below the circle, which puts the
   circle's centre 3.67 px above the rect's centre - hence `anchoredPosition (-34, -29.67)`.
 
-### Fixed along the way
+### Modal backdrop and orientation
 
-The full-screen `Background` inside every modal window used to be the dimmer itself (black at 45 %)
-with `raycastTarget = true`. But the dimmer is drawn by `ModalBackdropPresenter` as a separate
-object that sits in the layer *below* the window - so the window's own backdrop covered it and a tap
-outside the panel never reached it, which means `CloseOnBackdropClick` could not fire at all. Modal
-windows now have a transparent `Background` that does not take raycasts; there is a single dimmer,
-owned by the engine, recoloured to `#052133` at 72 %.
+A modal window's full-screen `Background` is transparent and does not take raycasts; there is a
+single dimmer, owned by the engine (`ModalBackdropPresenter`), coloured `#052133` at 72 %. Don't make
+the window's own `Background` a dimmer with `raycastTarget = true`: the engine's dimmer sits in the
+layer *below* the window, so that backdrop would cover it, a tap outside the panel would never reach
+it, and `CloseOnBackdropClick` could not fire at all.
 
-Two project-level changes were needed for the mockup to match the screen: the `CanvasScaler` on
-`UIRoot` moved from 1920x1080 to **1080x1920**, and `PlayerSettings` moved to portrait.
+For the mockup to match the screen, the `CanvasScaler` on `UIRoot` is **1080x1920** and
+`PlayerSettings` is portrait.
 
 ### Fonts
 
@@ -196,8 +252,9 @@ unpacks into subfolders with every weight, both italics and a variable font - 15
 none of them referenced by anything - so it gets flattened rather than committed whole.
 `Tools/UI Kit/Build fonts and apply` builds a TMP SDF asset next to each `.ttf`
 (`CreateFontAsset`, 90 pt sampling, 1024 atlas, dynamic population, atlas texture and material
-stored inside the asset) and assigns them across all five prefabs by role: the display face on
-`Title`, button `Label`, `Amount` and `RewardLabel`, the body face on everything else. A new window
+stored inside the asset) and assigns them across the five hand-built prefabs by role (Inventory gets
+its fonts from its builder): the display face on `Title`, button `Label` and `Amount`, the body face
+on everything else, `RewardLabel` included. A new window
 whose text should be display needs its object name added to `DisplayObjects`.
 
 The matcher keeps the two things a Google Fonts download brings along, even though the folder no
@@ -207,19 +264,19 @@ face. The matcher drops anything with `Italic` in the name, prefers static over 
 prefers `Regular` - which is what makes dropping a fresh archive in and re-running safe.
 
 The editor tooling lives in `Assets/Editor/UiKit/` with its own assembly definition
-(`PopupSystem.EditorTools`, editor-only, referencing `Unity.TextMeshPro`). It sits in a subfolder on
-purpose: an asmdef directly in `Assets/Editor/` would swallow the scripts already there, such as
-`PlayModeResultProbe.cs`, and cut them off from the references the predefined editor assembly gives
-them for free.
+(`PopupSystem.EditorTools`, editor-only, referencing TMP, UGUI, Addressables and `PopupSystem.UI`).
+It sits in a subfolder on purpose: `Assets/Editor/` has its own asmdef,
+`PopupSystem.EditorTools.TestRunner`, which owns `TestRunMenu.cs` and `PlayModeResultProbe.cs`, and
+the kit tooling is a separate assembly from it.
 
 ### Disabled labels
 
 `Button`'s ColorTint transition only recolours the Selectable's `targetGraphic`, so on a greyed-out
-fill the kit's dark label (`#3A2A16` on `#5E5A50`) falls to about 1.7:1. `ButtonLabelTint`
+fill the kit's dark label (`#3A2A16` on `#5E5A50`) falls to about 2:1. `ButtonLabelTint`
 (`UI/Runtime/Widgets/`) carries the two label colours as serialized fields and swaps them when
-`interactable` flips, which brings the disabled state back to `#E7E1D3` at 5.4:1. It sits on all
-three CTAs - `ClaimButton`, `BuyButton`, `OkButton` - because every one of them goes disabled at
-some point in its flow.
+`interactable` flips, which brings the disabled state back to `#E7E1D3` at about 5.3:1. It sits on
+the three CTAs - `ClaimButton`, `BuyButton`, `OkButton` - because every one of them goes disabled at
+some point in its flow, and on the inventory cell's `Use`/`Drop` buttons.
 
 The component polls in `LateUpdate` behind a changed-value guard. `Selectable` raises no event when
 `interactable` flips, and the alternative - subclassing `Button` to override `DoStateTransition` -
@@ -274,6 +331,18 @@ Two things bite when swapping that sprite, both of them silent:
   `Image` pointing at the old name silently falls back to Unity's white quad - a white box on the
   boot screen, with no error. Re-assign `Image.sprite` after a reimport and re-render to check.
 
+### Daily reward cooldown timer
+
+While the daily reward is on cooldown, `DailyRewardWindow` shows a countdown in the claim button's
+slot - one slot, two states, never both, the same rule as the preloader's bar and Retry button. The
+timer is the kit's badge: `chip_9s` sliced, tinted frame `#0A4468`, 360x96, centred in the button's
+140 px slot (top -490) so nothing else on the panel moves between the states; its `Label` is Lilita
+44 in cream `#FFF6E3` (well above 4.5:1 on the frame colour). It is built by
+`UiKitDailyRewardTimerBuilder` (`Tools/UI Kit/Daily Reward/Add cooldown timer`, idempotent), and
+`.../Render cooldown states` writes `daily_reward_ready.png` and `daily_reward_cooldown.png`. The
+badge in the style sheet has a clock glyph; the kit has no clock sprite yet, so the timer is digits
+only - adding one means a new sprite in `generate_sprites.py`.
+
 ### Spinners
 
 The three `spinner_ring` instances - `OfferWindow/.../BannerLoading/Ring`,
@@ -302,3 +371,13 @@ into the `UI` group with them and need no entry of their own.
 An `Animator` per spinner is heavier than a five-line `MonoBehaviour` doing
 `transform.Rotate(0, 0, -360 * dt)`. Three of them, only alive while a loading state is on screen,
 is not a budget worth defending - and this way the rotation is an asset a designer can retime.
+
+## Landscape and the render check
+
+`MainScene`'s scaler is reference 1080 x 1920, match 0.5. On a 1920 x 1080 screen that is a scale of
+exactly 1.0 - the canvas is 1920 x 1080 *design* pixels - so any panel taller than about 1000 runs
+off the top and bottom. Every window in the kit is 960 or less except the inventory, which clamps
+itself to the screen and scrolls its grid (`windows.md`). `UiKitPrefabRenderer` always uses that
+same reference resolution, whatever size it renders at; setting the reference equal to the render
+size would make a landscape render look fine while the game did not. Render a new window in
+both orientations before calling it done.

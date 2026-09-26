@@ -13,7 +13,7 @@ assembled from the sprites and tokens that already exist.
   `screen-*.png` boards and `preloader-as-built.png`. Look at them before composing a new screen.
   They are exported from the design canvas "PopupSystem UI Kit", which stays the source of truth;
   `Docs/mockups/README.md` says how to re-export.
-- The workflow this plugs into: `CLAUDE.md` section 6, "Adding a new popup/window type".
+- The workflow this plugs into: `Docs/architecture.md` section 6, "Adding a new popup/window type".
 
 This file is the checklist. If it and the feature map disagree, the feature map is older - fix it.
 
@@ -59,7 +59,8 @@ Borders are Unity order: **left, bottom, right, top**.
 | `icon_close` `icon_settings` | 64x64 | - | cross, gear |
 | `icon_chest` | 128x128 | - | reward |
 | `spinner_ring` | 96x96 | - | 270 degree arc |
-| `icon_coin` `icon_gem` | 96x96 | - | colours baked in |
+| `icon_coin` `icon_gem` `icon_energy` | 96x96 | - | currencies, colours baked in, addressable `UI/Currencies/<id>` |
+| `item_sword` `item_potion` `item_arrows` `item_chest` `item_ore` | 128x128 | - | items, colours baked in, addressable at the catalog's `IconAddress` |
 | `banner_fallback` | 512x256 | - | remote banner placeholder |
 | `logo_lockup` | 346x321 | - | preloader logo |
 
@@ -77,7 +78,8 @@ exception, because it is type: vector in `Tools/ui-atlas/logo/logo_lockup.html`,
 Reference 1080x1920, `Scale With Screen Size`, match 0.5, PPU 100. Sprites are 1:1 with the mockup.
 
 - Panel is `panel_9s`, `Image.type = Sliced`, centred, with an **explicit size**. Existing sizes:
-  MainGame 920x560, Settings 860x360, DailyReward 860x680, Offer 860x900, RewardPopup 700x460.
+  MainGame 920x560, Settings 860x360, DailyReward 860x680, Offer 860x900, RewardPopup 700x460,
+  Inventory 860x940.
 - **No `LayoutGroup` anywhere.** Blocks run top-down from a 34 px inset: title, gold rule, cards,
   CTA. The view pool reuses instances, and explicit positions mean nothing rebuilds on open.
 - Buttons: `Image.color = white`, state carried by `Button.colors`. That is what makes `disabled` a
@@ -87,6 +89,17 @@ Reference 1080x1920, `Scale With Screen Size`, match 0.5, PPU 100. Sprites are 1
   at 1.7:1 on the grey fill.
 - A round button is three objects: body (`btn_round_body`), ring (`btn_round_ring`), icon. The tint
   touches only the body.
+- A **small action inside a card** (the inventory cell's `Use`/`Drop`, 72x40) is a `chip_9s` button
+  with the same `Button.colors` + `ButtonLabelTint` treatment. `btn_pill` cannot shrink below 140.
+- **Generated prefabs.** `InventoryWindow.prefab` and the inventory button on `MainGameWindow.prefab`
+  come from `Tools/UI Kit/Inventory/*` (`UiKitInventoryWindowBuilder.cs`), not from hand edits:
+  re-run the menu items after a kit change. That is the pattern for the next window too — a
+  builder is a set of numbers that can be reviewed, a hand-built prefab is not.
+- **Currencies and items are icons, never text.** Show them with an `IconAmountStripView` row fed by
+  `RewardIcons` (preload in `OnInitializeAsync`, describe synchronously after). Rows are built by
+  `Tools/UI Kit/Icons/Add icon rows to windows` (`UiKitRewardIconsBuilder.cs`); a new icon sprite
+  also needs its entry in `IconAddresses` and `Tools/UI Kit/Icons/Mark icon sprites addressable`.
+  Details and the per-window numbers: `ui-atlas.md`, "Reward icons".
 - Close button, measured rather than derived: anchor `(1, 1)`, pivot `(0.5, 0.5)`, size
   `88 x 95.33`, `anchoredPosition (-34, -29.67)`, ring 88, icon 36. The extra 7.33 of height is
   `btn_round_body`'s drop shadow, which puts the circle's centre 3.67 above the rect's centre.
@@ -107,6 +120,10 @@ references `Unity.TextMeshPro`). It is in a subfolder on purpose: an asmdef dire
 - `Tools/UI Kit/Build fonts and apply` - a new window whose text should be display needs its object
   name added to `DisplayObjects`.
 - `Tools/UI Kit/Render prefab` - the render check below.
+- `Tools/UI Kit/Icons/Mark icon sprites addressable`, `.../Add icon rows to windows`,
+  `.../Render icon screens` - the reward icons: addresses, the rows in four windows, their renders.
+- `Tools/UI Kit/Inventory/Build InventoryWindow prefab`, `.../Add inventory button to MainGameWindow`,
+  `.../Render inventory screens` - the generated inventory UI and its three check renders.
 
 ## Traps that fail silently
 

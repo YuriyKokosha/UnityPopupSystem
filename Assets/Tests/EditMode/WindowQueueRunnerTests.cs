@@ -398,11 +398,11 @@ namespace PopupSystem.Tests.EditMode
         }
 
         [Test]
-        public async Task WindowThatThrowsWhileOpening_IsSkippedForTheBurst_WithoutAdvancingItsBookkeeping()
+        public async Task WindowThatThrowsWhileOpening_IsSkippedUntilItsRetryTime_WithoutAdvancingItsBookkeeping()
         {
             UnityEngine.TestTools.LogAssert.Expect(
                 UnityEngine.LogType.Exception,
-                new Regex("DailyReward could not open"));
+                new Regex(@"\[Expected\] DailyReward could not open"));
 
             _dailyRewardAggregator.Available = true;
             _offerAggregator.Available = true;
@@ -427,13 +427,183 @@ namespace PopupSystem.Tests.EditMode
                 "A window that threw was never shown, so its cooldown must not have started.");
 
             _windowsManager.OpenExceptionFor = null;
-            var secondRun = _runner.ShowAvailableWindowsAsync();
+            await _runner.ShowAvailableWindowsAsync();
+
+            Assert.That(_windowsManager.OpenCalls, Has.Count.EqualTo(1), "Still inside its retry backoff.");
+
+            _time.AdvanceSeconds(2);
+            var retryRun = _runner.ShowAvailableWindowsAsync();
 
             Assert.That(_windowsManager.OpenCalls, Has.Count.EqualTo(2));
             Assert.That(_windowsManager.OpenCalls[1].Type, Is.EqualTo(WindowType.DailyReward));
 
             await _windowsManager.OpenCalls[1].Handle.CloseAsync();
-            await secondRun;
+            await retryRun;
+        }
+
+        // A failed load raises QueueBecameIdle; without the retry backoff that wakes the idle
+        // monitor straight into the same failing open, once per failed load.
+        [Test]
+        public async Task IdleMonitor_DoesNotHammerAWindowThatKeepsFailingToOpen()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] DailyReward could not open"));
+
+            _dailyRewardAggregator.Available = true;
+            _windowsManager.OpenExceptionFor = WindowType.DailyReward;
+            _queueManager.SetItems(new[] { new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0) });
+
+            _runner.StartIdleMonitoring();
+
+            Assert.That(await WaitUntilAsync(() => _windowsManager.OpenAttempts >= 1), Is.True);
+            await UniTask.Delay(WrongBehaviourWindowMs);
+
+            Assert.That(_windowsManager.OpenAttempts, Is.EqualTo(1), "The clock has not moved: no retry is due.");
+        }
+
+        // An aggregator that threw from IsAvailable escaped the pass; the idle monitor
+        // logged it and went straight back into the same pass - a main-thread loop with no yield.
+        [Test]
+        public async Task IdleMonitor_ContainsAThrowingAggregator_AndKeepsServingTheRest()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] broken availability source"));
+
+            _dailyRewardAggregator.ThrowFromIsAvailable = new InvalidOperationException("[Expected] broken availability source");
+            _offerAggregator.Available = true;
+            _queueManager.SetItems(new[]
+            {
+                new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0),
+                new WindowQueueInfo(WindowType.Offer, priority: 5, cooldownSeconds: 0),
+            });
+
+            _runner.StartIdleMonitoring();
+
+            Assert.That(await WaitUntilAsync(() => _windowsManager.OpenCalls.Count == 1), Is.True);
+            Assert.That(_windowsManager.OpenCalls[0].Type, Is.EqualTo(WindowType.Offer), "The healthy lower priority still opens.");
+
+            await _windowsManager.OpenCalls[0].Handle.CloseAsync();
+            var callsAfterFirstFailure = _dailyRewardAggregator.IsAvailableCalls;
+            await UniTask.Delay(WrongBehaviourWindowMs);
+
+            Assert.That(_dailyRewardAggregator.IsAvailableCalls, Is.EqualTo(callsAfterFirstFailure),
+                "Inside its retry backoff the broken aggregator is not asked again, however often the runner wakes.");
+        }
+
+        [Test]
+        public async Task AThrowingPayloadFactory_SkipsOnlyItsOwnWindow()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] payload factory failure"));
+
+            _dailyRewardAggregator.Available = true;
+            _dailyRewardAggregator.ThrowFromCreatePayload = new InvalidOperationException("[Expected] payload factory failure");
+            _offerAggregator.Available = true;
+            _queueManager.SetItems(new[]
+            {
+                new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0),
+                new WindowQueueInfo(WindowType.Offer, priority: 5, cooldownSeconds: 0),
+            });
+
+            var runTask = _runner.ShowAvailableWindowsAsync();
+
+            Assert.That(_windowsManager.OpenCalls, Has.Count.EqualTo(1));
+            Assert.That(_windowsManager.OpenCalls[0].Type, Is.EqualTo(WindowType.Offer));
+
+            await _windowsManager.OpenCalls[0].Handle.CloseAsync();
+            await runTask;
+        }
+
+        [Test]
+        public async Task AThrowingSchedule_DoesNotStopTheIdleMonitor()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] schedule source failure"));
+
+            _dailyRewardAggregator.ThrowFromNextAvailabilityChange = new InvalidOperationException("[Expected] schedule source failure");
+            _queueManager.SetItems(new[]
+            {
+                new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0),
+                new WindowQueueInfo(WindowType.Offer, priority: 5, cooldownSeconds: 0),
+            });
+
+            _runner.StartIdleMonitoring();
+            await UniTask.Delay(WrongBehaviourWindowMs);
+
+            _offerAggregator.Available = true;
+
+            Assert.That(await WaitUntilAsync(() => _windowsManager.OpenCalls.Count == 1), Is.True);
+            Assert.That(_windowsManager.OpenCalls[0].Type, Is.EqualTo(WindowType.Offer));
+
+            await _windowsManager.OpenCalls[0].Handle.CloseAsync();
+        }
+
+        // The re-arm pass asks already-shown windows for their availability before the eligibility check does.
+        // Without the retry guard on that path too, every wake would call the broken source again, log again and
+        // push its retry time further out.
+        [Test]
+        public async Task AnAlreadyShownWindowWhoseAggregatorStartsThrowing_IsNotAskedAgain_InsideItsBackoff()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] availability source broke after the window was shown"));
+
+            _dailyRewardAggregator.Available = true;
+            _queueManager.SetItems(new[] { new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0) });
+
+            var firstRun = _runner.ShowAvailableWindowsAsync();
+            Assert.That(_windowsManager.OpenCalls, Has.Count.EqualTo(1));
+            await _windowsManager.OpenCalls[0].Handle.CloseAsync();
+            await firstRun;
+
+            _dailyRewardAggregator.ThrowFromIsAvailable =
+                new InvalidOperationException("[Expected] availability source broke after the window was shown");
+            var callsBefore = _dailyRewardAggregator.IsAvailableCalls;
+
+            for (var i = 0; i < 5; i++)
+            {
+                await _runner.ShowAvailableWindowsAsync();
+            }
+
+            Assert.That(
+                _dailyRewardAggregator.IsAvailableCalls - callsBefore,
+                Is.EqualTo(1),
+                "One failure, then silence until the retry time: the clock has not moved.");
+            Assert.That(_windowsManager.OpenCalls, Has.Count.EqualTo(1));
+        }
+
+        // The first failure of a schedule source sets a 2 s retry. The wait computed in that same pass must end
+        // at that retry, not at the 60 s heartbeat: with nothing else to wake the runner, a source that recovers
+        // would otherwise be looked at again only a minute later.
+        [Test]
+        public async Task ARecoveredScheduleSource_IsPickedUpAtItsRetryTime_WithNothingElseToWakeTheRunner()
+        {
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Exception,
+                new Regex(@"\[Expected\] schedule source failed once"));
+
+            _dailyRewardAggregator.ThrowFromNextAvailabilityChange =
+                new InvalidOperationException("[Expected] schedule source failed once");
+            _queueManager.SetItems(new[] { new WindowQueueInfo(WindowType.DailyReward, priority: 10, cooldownSeconds: 0) });
+
+            _runner.StartIdleMonitoring();
+
+            // Recovery raises no event: the source stops throwing and becomes available by schedule, and the
+            // injected clock passes the retry time. Only the runner's own wait can notice.
+            _dailyRewardAggregator.ThrowFromNextAvailabilityChange = null;
+            _dailyRewardAggregator.AvailableFromUtc = _time.UtcNow;
+            _time.AdvanceSeconds(2);
+
+            Assert.That(
+                await WaitUntilAsync(() => _windowsManager.OpenCalls.Count == 1),
+                Is.True,
+                "The runner slept past the retry time - the wait fell back to the heartbeat.");
+
+            await _windowsManager.OpenCalls[0].Handle.CloseAsync();
         }
 
         [Test]

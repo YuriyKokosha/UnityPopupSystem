@@ -46,10 +46,23 @@ namespace PopupSystem.Tests.EditMode.Fakes
 
         public DateTime? AvailableFromUtc { get; set; }
 
+        /// <summary>When set, every call of the matching member throws it: an aggregator is an extension point,
+        /// and the runner must contain whatever one throws to that one window.</summary>
+        public Exception ThrowFromIsAvailable { get; set; }
+        public Exception ThrowFromCreatePayload { get; set; }
+        public Exception ThrowFromNextAvailabilityChange { get; set; }
+
+        public int IsAvailableCalls { get; private set; }
+
         public DateTime? NextAvailabilityChangeUtc
         {
             get
             {
+                if (ThrowFromNextAvailabilityChange != null)
+                {
+                    throw ThrowFromNextAvailabilityChange;
+                }
+
                 if (_explicitNextAvailabilityChangeUtc.HasValue)
                 {
                     return _explicitNextAvailabilityChangeUtc;
@@ -67,6 +80,13 @@ namespace PopupSystem.Tests.EditMode.Fakes
 
         public bool IsAvailable()
         {
+            IsAvailableCalls++;
+
+            if (ThrowFromIsAvailable != null)
+            {
+                throw ThrowFromIsAvailable;
+            }
+
             if (!AvailableFromUtc.HasValue)
             {
                 return _available;
@@ -83,6 +103,14 @@ namespace PopupSystem.Tests.EditMode.Fakes
             return _timeProvider.UtcNow >= AvailableFromUtc.Value;
         }
 
-        public IWindowData CreatePayload() => Payload;
+        public IWindowData CreatePayload()
+        {
+            if (ThrowFromCreatePayload != null)
+            {
+                throw ThrowFromCreatePayload;
+            }
+
+            return Payload;
+        }
     }
 }

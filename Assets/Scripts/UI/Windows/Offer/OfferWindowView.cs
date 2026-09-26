@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using PopupSystem.UI.Runtime;
+using PopupSystem.UI.Runtime.Widgets;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +19,7 @@ namespace PopupSystem.UI.Windows.Offer
         [SerializeField] private RawImage _bannerImage;
         [SerializeField] private GameObject _bannerLoadingIndicator;
         [SerializeField] private GameObject _bannerFallback;
+        [SerializeField] private IconAmountStripView _reward;
 
         public event Action BuyClicked;
 
@@ -58,6 +61,21 @@ namespace PopupSystem.UI.Windows.Offer
             }
 
             SetBannerLoading(false);
+            SetActionInteractable(true);
+            SetReward(null);
+        }
+
+        public void SetReward(IReadOnlyList<IconAmountModel> reward)
+        {
+            if (_reward != null)
+            {
+                _reward.Render(reward);
+            }
+        }
+
+        public void SetActionInteractable(bool isInteractable)
+        {
+            _buyButton.interactable = isInteractable;
         }
 
         // Detach, never destroy: RemoteImageLoader owns the texture and hands the same one to the

@@ -30,6 +30,7 @@ namespace PopupSystem.EditorTools
             // The button only stretches horizontally: the sprite's height is the button's height,
             // so the top and bottom are left unsliced - otherwise the bevel band stretches with it.
             { "btn_pill", new Vector4(74f, 0f, 74f, 0f) },
+            { "btn_pill_small", new Vector4(40f, 0f, 40f, 0f) },
         };
 
         [MenuItem("Tools/UI Kit/Configure sprites")]

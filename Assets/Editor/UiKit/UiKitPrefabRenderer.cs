@@ -22,6 +22,7 @@ namespace PopupSystem.EditorTools
 
         /// <summary>The flat stage colour the kit's screens sit on (#0E5C8C).</summary>
         public static readonly Color StageBackground = new Color32(0x0E, 0x5C, 0x8C, 0xFF);
+        public static readonly Vector2 GameReferenceResolution = new(1080f, 1920f);
 
         private const string RendersFolder = "Claude outputs/UIKit/Renders";
         private const int UiLayer = 5;
@@ -200,7 +201,10 @@ namespace PopupSystem.EditorTools
 
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(width, height);
+            // Always the game's own reference (MainScene's UIRoot), not the render size: a landscape render has
+            // to show what a landscape *screen* does to the layout, and with match 0.5 that is a different
+            // scale than "the reference happens to equal the screen".
+            scaler.referenceResolution = GameReferenceResolution;
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
             scaler.referencePixelsPerUnit = ReferencePixelsPerUnit;

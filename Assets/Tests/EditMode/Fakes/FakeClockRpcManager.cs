@@ -6,6 +6,7 @@ using PopupSystem.Game.Services.Rpc;
 using PopupSystem.Game.Services.Rpc.Core;
 using PopupSystem.Game.Services.Rpc.Inventory;
 using PopupSystem.Game.Services.Rpc.RemoteConfig;
+using PopupSystem.Game.Services.Rpc.Wallet;
 using PopupSystem.Game.Services.Rpc.WindowQueue;
 
 namespace PopupSystem.Tests.EditMode.Fakes
@@ -22,6 +23,7 @@ namespace PopupSystem.Tests.EditMode.Fakes
         public int ServerTimeCallCount { get; private set; }
 
         public ICoreRpcApi Core => this;
+        public IWalletRpcApi Wallet => null;
         public IInventoryRpcApi Inventory => null;
         public IWindowQueueRpcApi WindowQueue => null;
         public IRemoteConfigApi RemoteConfig => null;

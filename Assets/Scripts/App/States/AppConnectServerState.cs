@@ -5,6 +5,7 @@ using PopupSystem.Game.Services.Inventory;
 using PopupSystem.Game.Services.Rpc;
 using PopupSystem.Game.Services.Profile;
 using PopupSystem.Game.Services.Time;
+using PopupSystem.Game.Services.Wallet;
 using PopupSystem.Game.Services.WindowQueue;
 using PopupSystem.UI.Preloader;
 using UnityEngine;
@@ -15,7 +16,8 @@ namespace PopupSystem.App.States
     {
         private readonly IRpcManager _rpcManager;
         private readonly ServerSyncedTimeProvider _timeProvider;
-        private readonly PlayerInventoryManager _playerInventoryManager;
+        private readonly WalletManager _walletManager;
+        private readonly InventorySyncService _inventorySync;
         private readonly PlayerProfileManager _playerProfileManager;
         private readonly WindowQueueManager _windowQueueManager;
         private readonly PreloaderOverlayView _preloaderOverlay;
@@ -23,14 +25,16 @@ namespace PopupSystem.App.States
         public AppConnectServerState(
             IRpcManager rpcManager,
             ServerSyncedTimeProvider timeProvider,
-            PlayerInventoryManager playerInventoryManager,
+            WalletManager walletManager,
+            InventorySyncService inventorySync,
             PlayerProfileManager playerProfileManager,
             WindowQueueManager windowQueueManager,
             PreloaderOverlayView preloaderOverlay)
         {
             _rpcManager = rpcManager;
             _timeProvider = timeProvider;
-            _playerInventoryManager = playerInventoryManager;
+            _walletManager = walletManager;
+            _inventorySync = inventorySync;
             _playerProfileManager = playerProfileManager;
             _windowQueueManager = windowQueueManager;
             _preloaderOverlay = preloaderOverlay;
@@ -76,20 +80,27 @@ namespace PopupSystem.App.States
         {
             _preloaderOverlay.HideError();
             _preloaderOverlay.Show("Connecting to server...");
-            _preloaderOverlay.SetProgress(0.2f);
+            _preloaderOverlay.SetProgress(0.15f);
 
             await _timeProvider.SyncAsync(cancellationToken);
 
-            _preloaderOverlay.SetProgress(0.35f);
+            _preloaderOverlay.SetProgress(0.25f);
             var profile = await _rpcManager.Core.GetPlayerProfileAsync(cancellationToken);
             _playerProfileManager.SetProfile(profile);
-            _preloaderOverlay.SetProgress(0.6f);
-            var inventory = await _rpcManager.Inventory.GetInventorySnapshotAsync(cancellationToken);
-            _playerInventoryManager.SetInventory(inventory);
-            _preloaderOverlay.SetProgress(0.75f);
+
+            _preloaderOverlay.SetProgress(0.4f);
+            var wallet = await _rpcManager.Wallet.GetWalletSnapshotAsync(cancellationToken);
+            _walletManager.SetWallet(wallet);
+
+            _preloaderOverlay.SetProgress(0.55f);
+            // The inventory sync is not caught here on purpose: the inventory is where rewards land, and playing
+            // on an unconfirmed state is worse than one more retry prompt. See Docs/knowledge-base/resilience.md.
+            await _inventorySync.SyncAsync(profile.PlayerId, cancellationToken);
+
+            _preloaderOverlay.SetProgress(0.8f);
             var windowQueue = await _rpcManager.WindowQueue.GetWindowQueueAsync(cancellationToken);
             _windowQueueManager.SetItems(windowQueue);
-            _preloaderOverlay.SetProgress(0.85f);
+            _preloaderOverlay.SetProgress(0.9f);
         }
 
         private UniTask WaitForRetryAsync(CancellationToken cancellationToken)

@@ -28,9 +28,13 @@ namespace PopupSystem.UI.Runtime.Manager
         private readonly List<WindowInstance> _activeInstances = new();
 
         private WindowInstance _baseWindow;
+        private UniTaskCompletionSource<WindowHandle> _baseScreenOpen;
+
+        private int _pendingOpens;
+        private bool _isDisposed;
 
         public bool IsQueueIdle =>
-            _popupStack.Count == 0 && _windowStack.Count == 0 && _closingHandles.Count == 0;
+            _pendingOpens == 0 && _popupStack.Count == 0 && _windowStack.Count == 0 && _closingHandles.Count == 0;
 
         public event Action QueueBecameIdle;
 
@@ -48,31 +52,115 @@ namespace PopupSystem.UI.Runtime.Manager
 
         public async UniTask<WindowHandle> OpenAsync(WindowType type, IWindowData payload = null)
         {
+            ThrowIfDisposed();
+
             var definition = _registry.Get(type);
 
-            if (definition.IsBaseScreen && _baseWindow != null && !_baseWindow.Handle.IsClosed)
+            if (!definition.IsBaseScreen)
+            {
+                return await OpenNewInstanceAsync(type, payload);
+            }
+
+            // Checked before _baseWindow: that slot is filled before the open reaches Active, and a concurrent
+            // caller must get the same "returns once Active" result as the first one.
+            var inFlight = _baseScreenOpen;
+            if (inFlight != null)
+            {
+                return await inFlight.Task;
+            }
+
+            if (_baseWindow != null && !_baseWindow.Handle.IsClosed)
             {
                 return _baseWindow.Handle;
             }
 
-            var instance = await _windowFactory.CreateAsync(
-                new WindowRequest(type, payload), CancellationToken.None);
-            instance.Handle = new WindowHandle(type, () => CloseInstanceByHandleAsync(instance.Handle));
-            instance.CloseRequestedHandler = () => OnCloseRequested(instance);
-            BindClose(instance);
+            // Every caller, the first included, awaits the shared source, so a failure is always observed.
+            var source = new UniTaskCompletionSource<WindowHandle>();
+            _baseScreenOpen = source;
+            RunBaseScreenOpenAsync(source, type, payload).Forget();
+            return await source.Task;
+        }
 
-            if (instance.Definition.Kind == UIEntryKind.Popup)
+        private async UniTaskVoid RunBaseScreenOpenAsync(
+            UniTaskCompletionSource<WindowHandle> source,
+            WindowType type,
+            IWindowData payload)
+        {
+            WindowHandle handle;
+            try
             {
-                _popupStack.Push(instance);
+                handle = await OpenNewInstanceAsync(type, payload);
             }
-            else if (instance.Definition.IsBaseScreen)
+            catch (Exception ex)
             {
-                _baseWindow = instance;
+                ClearBaseScreenOpen(source);
+                source.TrySetException(ex);
+                return;
             }
-            else
+
+            // Cleared before completing: a resumed waiter that opens again must see the base slot, not this.
+            ClearBaseScreenOpen(source);
+            source.TrySetResult(handle);
+        }
+
+        private void ClearBaseScreenOpen(UniTaskCompletionSource<WindowHandle> source)
+        {
+            if (_baseScreenOpen == source)
             {
-                _windowStack.Push(instance);
+                _baseScreenOpen = null;
             }
+        }
+
+        private async UniTask<WindowHandle> OpenNewInstanceAsync(WindowType type, IWindowData payload)
+        {
+            WindowInstance instance;
+
+            // Busy from here, not from the push below: the prefab load is asynchronous, and the queue must never
+            // read "idle" while a window is already on its way onto the screen.
+            _pendingOpens++;
+            try
+            {
+                instance = await _windowFactory.CreateAsync(
+                    new WindowRequest(type, payload), CancellationToken.None);
+
+                // The load is not cancelled on Dispose (it may be shared with other callers of the provider), so
+                // a window that finishes loading after Dispose is released here instead of being opened.
+                if (_isDisposed)
+                {
+                    DiscardUnopenedInstance(instance);
+                    ThrowIfDisposed();
+                }
+
+                instance.Handle = new WindowHandle(type, () => CloseInstanceByHandleAsync(instance.Handle));
+                instance.CloseRequestedHandler = () => OnCloseRequested(instance);
+                BindClose(instance);
+
+                if (instance.Definition.Kind == UIEntryKind.Popup)
+                {
+                    _popupStack.Push(instance);
+                }
+                else if (instance.Definition.IsBaseScreen)
+                {
+                    _baseWindow = instance;
+                }
+                else
+                {
+                    _windowStack.Push(instance);
+                }
+            }
+            catch
+            {
+                _pendingOpens--;
+
+                if (!_isDisposed && IsQueueIdle)
+                {
+                    QueueBecameIdle?.Invoke();
+                }
+
+                throw;
+            }
+
+            _pendingOpens--;
 
             RefreshBackdrops();
             await OpenInstanceAsync(instance, payload);
@@ -81,6 +169,7 @@ namespace PopupSystem.UI.Runtime.Manager
 
         public void Dispose()
         {
+            _isDisposed = true;
             _closingHandles.Clear();
 
             while (_popupStack.Count > 0)
@@ -100,6 +189,58 @@ namespace PopupSystem.UI.Runtime.Manager
             }
         }
 
+        // Cancellation, not ObjectDisposedException: the runner ends on it and the UI callers drop it without logging.
+        private void ThrowIfDisposed()
+        {
+            if (_isDisposed)
+            {
+                throw new OperationCanceledException("WindowsManager has been disposed.");
+            }
+        }
+
+        private void DiscardUnopenedInstance(WindowInstance instance)
+        {
+            CancelLifetime(instance);
+            ReleaseInstance(instance);
+        }
+
+        // Controller and view code runs here (token callbacks); a throw must not skip the rest of the teardown.
+        private static void CancelLifetime(WindowInstance instance)
+        {
+            try
+            {
+                instance.LifetimeCts.Cancel();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
+
+        // Each step guarded on its own: a throwing controller Dispose must still release the view to the pool.
+        private void ReleaseInstance(WindowInstance instance)
+        {
+            try
+            {
+                instance.Controller.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+
+            try
+            {
+                _windowFactory.Release(instance);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+
+            instance.LifetimeCts.Dispose();
+        }
+
         private void DisposeInstance(WindowInstance instance)
         {
             if (instance == null || instance.Handle == null || instance.Handle.IsClosed)
@@ -114,11 +255,9 @@ namespace PopupSystem.UI.Runtime.Manager
                 instance.View.CloseRequested -= instance.CloseRequestedHandler;
             }
 
-            instance.LifetimeCts.Cancel();
+            CancelLifetime(instance);
             instance.Handle.SetState(WindowLifecycleState.Closing);
-            instance.Controller.Dispose();
-            _windowFactory.Release(instance);
-            instance.LifetimeCts.Dispose();
+            ReleaseInstance(instance);
             instance.Handle.MarkClosed();
         }
 
@@ -233,7 +372,7 @@ namespace PopupSystem.UI.Runtime.Manager
             instance.IsClosing = true;
             _closingHandles.Add(instance.Handle);
             instance.View.CloseRequested -= instance.CloseRequestedHandler;
-            instance.LifetimeCts.Cancel();
+            CancelLifetime(instance);
             instance.Handle.SetState(WindowLifecycleState.Closing);
 
             try
@@ -246,22 +385,24 @@ namespace PopupSystem.UI.Runtime.Manager
                 Debug.LogException(ex);
             }
 
-            instance.Controller.Dispose();
-
-            _windowFactory.Release(instance);
-            instance.LifetimeCts.Dispose();
+            ReleaseInstance(instance);
 
             // Stop counting the window as busy before completing the handle: MarkClosed can resume a waiter
             // synchronously, and it must not observe a stale "not idle".
             _closingHandles.Remove(instance.Handle);
             instance.Handle.MarkClosed();
 
-            if (IsQueueIdle)
+            try
             {
-                QueueBecameIdle?.Invoke();
+                if (IsQueueIdle)
+                {
+                    QueueBecameIdle?.Invoke();
+                }
             }
-
-            RefreshBackdrops();
+            finally
+            {
+                RefreshBackdrops();
+            }
         }
 
         private async UniTask OpenInstanceAsync(WindowInstance instance, IWindowData payload)
@@ -274,6 +415,13 @@ namespace PopupSystem.UI.Runtime.Manager
                     instance.Handle,
                     payload,
                     instance.LifetimeCts.Token);
+
+                // Closed while initializing, by a controller that ignored its token: the view is already back in
+                // the pool, so it must not be shown. SetState would ignore the backward move anyway.
+                if (instance.IsClosing)
+                {
+                    throw new OperationCanceledException();
+                }
 
                 instance.Handle.SetState(WindowLifecycleState.Opening);
 

@@ -8,5 +8,6 @@ namespace PopupSystem.Contracts
         RewardPopup = 3,
         DailyReward = 4,
         Offer = 5,
+        Inventory = 6,
     }
 }

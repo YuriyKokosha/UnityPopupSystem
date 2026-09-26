@@ -15,6 +15,8 @@ namespace PopupSystem.Contracts
         /// Closing. Test for the stage you need; never infer that its predecessor ran.</summary>
         public WindowLifecycleState State { get; private set; } = WindowLifecycleState.None;
 
+        /// <summary>Raised once per stage reached. Each subscriber is isolated: a throw is logged and never
+        /// reaches the other subscribers or the lifecycle driving the window.</summary>
         public event Action<WindowLifecycleState> StateChanged;
 
         public WindowHandle(WindowType type, Func<UniTask> closeAsync)
@@ -40,13 +42,14 @@ namespace PopupSystem.Contracts
 
         internal void SetState(WindowLifecycleState state)
         {
-            if (State == state)
+            // Repeats and backward moves are ignored; skipping forward is allowed (see State).
+            if (state <= State)
             {
                 return;
             }
 
             State = state;
-            StateChanged?.Invoke(state);
+            RaiseStateChanged(state);
         }
 
         internal void MarkClosed()
@@ -57,8 +60,36 @@ namespace PopupSystem.Contracts
             }
 
             IsClosed = true;
-            SetState(WindowLifecycleState.Disposed);
-            _closedSource.TrySetResult();
+            try
+            {
+                SetState(WindowLifecycleState.Disposed);
+            }
+            finally
+            {
+                // IsClosed is already true, so a second MarkClosed returns early: this is the only completion.
+                _closedSource.TrySetResult();
+            }
+        }
+
+        private void RaiseStateChanged(WindowLifecycleState state)
+        {
+            var handlers = StateChanged;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<WindowLifecycleState>)handler).Invoke(state);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogException(ex);
+                }
+            }
         }
     }
 }

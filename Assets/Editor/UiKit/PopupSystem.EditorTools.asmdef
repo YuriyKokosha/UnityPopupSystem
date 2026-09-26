@@ -3,7 +3,10 @@
     "rootNamespace": "PopupSystem.EditorTools",
     "references": [
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "PopupSystem.UI",
+        "Unity.Addressables",
+        "Unity.Addressables.Editor"
     ],
     "includePlatforms": [
         "Editor"

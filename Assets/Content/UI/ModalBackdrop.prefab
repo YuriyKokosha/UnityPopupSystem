@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 8029706031265998205}
   - component: {fileID: 643767232085631656}
   - component: {fileID: 1203717896374933621}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: ModalBackdrop
   m_TagString: Untagged
   m_Icon: {fileID: 0}

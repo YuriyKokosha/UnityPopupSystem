@@ -1,16 +1,17 @@
 # Addressables and content loading
 
 Every UI prefab lives under `Assets/Content/UI/**`, is marked Addressable in the `UI` group, and is
-loaded by **address** through `IUiPrefabProvider`. There is no `Resources` folder in the project.
+loaded by **address** through `IUiPrefabProvider`. The only `Resources` folder is TextMesh Pro's own
+(`Assets/TextMesh Pro/Resources`); nothing of ours loads through `Resources`.
 
 ## Why the port is async
 
-The engine used to call `Resources.Load` directly. That meant two things: everything under
-`Assets/Resources` shipped in the binary and was loaded into memory at startup whether or not it
-was ever shown, and the load was *synchronous* — so `IWindowFactory` could be synchronous too, and
-every caller above it was written on that assumption.
+Calling `Resources.Load` directly would mean two things: everything under `Assets/Resources` ships
+in the binary and is loaded into memory at startup whether or not it is ever shown, and the load is
+*synchronous* — so `IWindowFactory` could be synchronous too, and every caller above it would be
+written on that assumption.
 
-Swapping the loader for anything that goes to disk or the network would then have meant changing the
+Swapping the loader for anything that goes to disk or the network would then mean changing the
 contract of the whole open path, up through `WindowsManager` and out to the queue. That is exactly
 the kind of change that stops happening once a project is large. So the contract is async up front,
 and what sits behind it — Addressables today, a CDN tomorrow — is one implementation away.
@@ -24,8 +25,15 @@ These prefabs are opened and closed over and over. Releasing one on close would 
 on the next open, which is the opposite of what the view pool exists for. After the first open, the
 "load" is a dictionary lookup.
 
-That is right for seven windows and wrong for a real catalog. Anything that grows this beyond a
-fixed, small set of always-needed prefabs needs a release policy first — see `CLAUDE.md` §10.
+That is right for six windows plus the backdrop and preloader, and wrong for a real catalog.
+Anything that grows this beyond a fixed, small set of always-needed prefabs needs a release policy
+first — see `Docs/architecture.md` §10.
+
+Reward and currency icons go through a second provider, `AddressablesUiIconProvider`
+(`IUiIconProvider`), with the same rules: handles kept until `Dispose`, a failed handle dropped
+rather than cached. Its consumers use the same two-step shape as the backdrop — `RewardIcons`'
+`Preload*Async` awaits the sprites a window is about to show, then `GetCurrencyIcon`/`GetItemIcon`
+read them back through `GetLoaded`.
 
 ## Loads are deduplicated by address
 

@@ -22,11 +22,12 @@ That matters for everything that owns something releasable, and every one of the
 | Type | What it owns |
 |---|---|
 | `AddressablesUiPrefabProvider` | Every Addressables handle it took |
+| `AddressablesUiIconProvider` | Every icon sprite handle it took |
 | `RemoteImageLoader` | Every texture it downloaded and cached |
 | `WindowFactory` | Pooled view GameObjects |
 | `WindowsManager` | Whatever windows are still on screen — their controllers' subscriptions and lifetime tokens |
 | `DailyRewardWindowAggregator` | A subscription to `DailyRewardManager` |
-| `WindowQueueRunner` | Subscriptions to every aggregator and to the windows manager |
+| `WindowQueueRunner` | Subscriptions to every aggregator, the windows manager and the queue manager |
 | `AppStateManager` | The current state's teardown |
 
 **The rule that follows: if a class subscribes to anything, bind it as `IDisposable`.** The
@@ -62,7 +63,7 @@ backdrop grows a component with dependencies is the moment to add the factory, n
 `WindowRegistry` and `WindowControllerResolver` only ever iterate the bound modules, so adding a
 window type never means editing either of them; `WindowQueueRunner` treats aggregators the same
 way. This is the project's one recurring extensibility pattern and new features should follow it
-rather than add a branch somewhere central. The full workflow is `CLAUDE.md` §6.
+rather than add a branch somewhere central. The full workflow is `Docs/architecture.md` §6.
 
 ## `ITickable` is a container concept — so it stays in `App`
 
@@ -73,12 +74,12 @@ in `App` is what keeps Zenject out of `PopupSystem.Game` entirely.
 
 ## Shutdown actually has to run
 
-`AppStateManager.ExitAsync` only ever ran for a state being *replaced* by the next one, so the last
-state in the sequence — `AppMainGameState` — never exited at all. Its teardown was unreachable dead
-code, which is why `WindowQueueRunner.StopIdleMonitoring` was never called and the idle monitor's
-`CancellationTokenSource` was neither cancelled nor disposed: the loop simply outlived the state
-that started it. `AppStateManager` is bound as `IDisposable` so the container runs teardown when the
-scene or app goes away.
+A state transition runs `ExitAsync` only for a state being *replaced* by the next one, so on its
+own it never reaches the last state in the sequence — `AppMainGameState`. Its teardown would be dead
+code: `WindowQueueRunner.StopIdleMonitoring` never called, the idle monitor's
+`CancellationTokenSource` neither cancelled nor disposed, the loop outliving the state that started
+it. So `AppStateManager` is bound as `IDisposable` and the container runs teardown when the scene or
+app goes away.
 
 Teardown from `Dispose` has to be synchronous. Every `ExitAsync` in the sequence completes
 synchronously today (they cancel tokens and stop loops rather than awaiting), so nothing is lost —
@@ -95,7 +96,7 @@ demo, a leak per window per load the moment a scene is unloaded and reloaded.
 ## Assemblies enforce the layering
 
 Each layer is its own assembly definition, so the dependency direction is a compile error rather
-than a code-review finding. The table is in `CLAUDE.md` §3.
+than a code-review finding. The table is in `Docs/architecture.md` §3.
 
 Internals are granted **by name, not by blanket**. `WindowHandle.SetState()/MarkClosed()` are
 `internal` to `PopupSystem.Contracts` because advancing a window's lifecycle is the engine's job and
@@ -106,13 +107,17 @@ no caller holding a handle should be able to fake a state change.
 - `PopupSystem.Tests.EditMode` — `FakeWindowsManager`, which has to mirror that driving in order to
   test `WindowQueueRunner` without a scene or a container.
 
-This replaced `InternalsVisibleTo("Assembly-CSharp-Editor")`, which existed only because the project
-had no assembly definitions at all: runtime code sat in the predefined `Assembly-CSharp`, a custom
-test asmdef cannot reference that assembly, and the workaround was to fall back on the "magic Editor
-folder" convention and open every internal in the project to the whole editor-default assembly.
+`Assets/Scripts/UI/AssemblyInfo.cs` makes one more grant of the same kind: `PopupSystem.UI` opens
+its internals to `PopupSystem.Tests.PlayMode` alone, for the view buttons and pool hooks the PlayMode
+suite drives.
+
+Don't fall back on `InternalsVisibleTo("Assembly-CSharp-Editor")`. That is the workaround for a
+project without assembly definitions (a custom test asmdef cannot reference the predefined
+`Assembly-CSharp`), and it opens every internal in the project to the whole editor-default assembly
+through the "magic Editor folder" convention.
 
 One consequence to know before sharing test helpers: `PopupSystem.Tests.EditMode` is an
 **Editor-only** assembly, and an assembly with no platform restrictions cannot reference one that
-has them. That is why the PlayMode suite has its own small fake clock rather than reusing the
-EditMode `FakeTimeProvider`. Sharing them would mean a third assembly for fakes — worth doing when
-more than one is duplicated, not for one.
+has them. That is why the PlayMode suite has its own small fake clock and in-memory inventory
+storage rather than reusing the EditMode `FakeTimeProvider` and `FakeInventoryStorage`. Sharing them
+would mean a third assembly for fakes; with two helpers now duplicated, that threshold is reached.

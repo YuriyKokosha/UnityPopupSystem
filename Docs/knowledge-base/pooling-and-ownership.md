@@ -9,10 +9,10 @@ Three families of trap that share a cause: something outlives the thing that cre
 recycling the view is a real recurring saving. Only the `WindowController` is ever fresh per open —
 it holds the per-open state and is a cheap plain object.
 
-The pool is capped (`MaxPooledPerType`). It used to be unbounded and never emptied, which is a leak
-wearing a pool's clothes: nothing in this system shows two windows of the same type at once, so one
-spare covers every reopen and the second is slack for the moment an outgoing view is still animating
-out as the next is acquired. Past that, holding a view is strictly worse than instantiating one.
+The pool is capped (`MaxPooledViewsPerType`). An unbounded pool that is never emptied is a leak
+wearing a pool's clothes: nothing in this system shows two windows of the same type at once, so
+one spare covers every reopen and the second is slack for the moment an outgoing view is still
+animating out as the next is acquired. Past that, holding a view is strictly worse than instantiating one.
 `WindowFactory.Dispose` destroys whatever the pool still holds.
 
 ### What a pooled view brings back with it
@@ -27,7 +27,7 @@ today, so it is a no-op — but it costs nothing and removes a subtle bug if tha
 **A pooled view was last seen mid-close.** `FadeScaleWindowTransition.PlayCloseAsync` turned
 `CanvasGroup.blocksRaycasts` and `interactable` off; `PlayOpenAsync` turning them back on is
 therefore load-bearing, not defensive tidiness. Without it a reopened window renders and ignores
-every click. The open transition also fades from wherever alpha currently is rather than a hardcoded
+every click. The close transition fades from wherever alpha currently is rather than a hardcoded
 1, because a window interrupted mid-open may still be mid-fade-in.
 
 **A pooled view keeps whatever its controller left behind.** `WindowView.ResetForPool()` is called
@@ -43,9 +43,9 @@ because the window closes right after. So its `OnInitializeAsync` restores a cle
 init rather than assuming a fresh view. A regression here is invisible on the first open and bricks
 every one after it.
 
-Pooling a view at shutdown is pointless — `WindowFactory.Release` skips it while
-`WindowsManager.Dispose` is tearing the last windows down, since a reopen will never come and it
-would only keep a GameObject alive.
+Pooling a view at shutdown is pointless — once `WindowFactory.Dispose` has run, `Release` destroys
+the view instead of pooling it, since a reopen will never come and it would only keep a GameObject
+alive. Anything pooled before that is destroyed by `Dispose` itself.
 
 ## Who owns a downloaded texture
 
@@ -54,10 +54,10 @@ destroys them together on `Dispose`. The same shape as the prefab provider, and 
 reason: the offer popup is opened, closed and opened again, and re-downloading its banner every
 time is what a cache exists to avoid.
 
-That is a **change of ownership**, and it is the thing to know when touching either consumer. Each
-download used to belong to whoever asked for it, so `OfferWindowView` destroyed the texture on pool
-reset and `OfferWindowController` destroyed it on the cancellation path. Both would now leave a
-destroyed entry in the cache, to be handed to the next window asking for the same URL.
+So the **loader owns the texture, not whoever asked for it**, and that is the thing to know when
+touching either consumer. If `OfferWindowView` destroyed the texture on pool reset, or
+`OfferWindowController` on the cancellation path, it would leave a destroyed entry in the cache, to
+be handed to the next window asking for the same URL.
 
 **Consumers display; the loader owns.** Corollaries:
 
@@ -109,7 +109,7 @@ arriving mid-close runs the whole teardown twice.
 
 ## Aborting an open
 
-Cancellation or failure while opening happens for real now that transitions take frames. The
+Cancellation or failure while opening happens for real, because transitions take frames. The
 instance was already pushed onto its stack (or set as `_baseWindow`) *before* `OpenInstanceAsync`
 started, so — unlike an explicit close — nobody has removed it from tracking yet.
 `AbortOpeningInstanceAsync` does that first: without it, a closed-but-still-in-the-stack instance

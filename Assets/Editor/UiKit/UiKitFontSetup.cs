@@ -37,7 +37,8 @@ namespace PopupSystem.EditorTools
         // Objects that carry the display face; everything else in a window gets the body face.
         private static readonly string[] DisplayObjects =
         {
-            "Title", "Label", "Amount", "RewardLabel",
+            // RewardLabel is gone: the reward is an icon row now and the label only carries an error sentence.
+            "Title", "Label", "Amount",
         };
 
         [MenuItem("Tools/UI Kit/Build fonts and apply")]

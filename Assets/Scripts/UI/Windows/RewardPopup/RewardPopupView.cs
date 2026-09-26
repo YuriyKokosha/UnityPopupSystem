@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using PopupSystem.UI.Runtime;
+using PopupSystem.UI.Runtime.Widgets;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,6 +13,7 @@ namespace PopupSystem.UI.Windows.RewardPopup
         [SerializeField] private Button _okButton;
         [SerializeField] private TMP_Text _titleLabel;
         [SerializeField] private TMP_Text _rewardLabel;
+        [SerializeField] private IconAmountStripView _rewards;
         [SerializeField] private GameObject _loadingState;
 
         public void SetTitle(string text)
@@ -21,11 +24,41 @@ namespace PopupSystem.UI.Windows.RewardPopup
             }
         }
 
+        /// <summary>A sentence instead of the reward row (an error). Clears the row.</summary>
         public void SetRewardText(string text)
         {
             if (_rewardLabel != null)
             {
                 _rewardLabel.text = text;
+            }
+
+            if (_rewards != null && !string.IsNullOrEmpty(text))
+            {
+                _rewards.Clear();
+            }
+        }
+
+        /// <summary>The granted reward, one icon per line. Clears any sentence.</summary>
+        public void SetRewards(IReadOnlyList<IconAmountModel> rewards)
+        {
+            if (_rewardLabel != null)
+            {
+                _rewardLabel.text = string.Empty;
+            }
+
+            if (_rewards != null)
+            {
+                _rewards.Render(rewards);
+            }
+        }
+
+        internal override void ResetForPool()
+        {
+            SetRewardText(string.Empty);
+
+            if (_rewards != null)
+            {
+                _rewards.Clear();
             }
         }
 

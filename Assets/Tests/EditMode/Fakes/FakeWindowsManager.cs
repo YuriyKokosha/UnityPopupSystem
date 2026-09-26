@@ -30,11 +30,21 @@ namespace PopupSystem.Tests.EditMode.Fakes
 
         public WindowType? OpenExceptionFor { get; set; }
 
+        /// <summary>Every OpenAsync call, including the ones that failed.</summary>
+        public int OpenAttempts { get; private set; }
+
         public UniTask<WindowHandle> OpenAsync(WindowType type, IWindowData payload = null)
         {
+            OpenAttempts++;
+
             if (OpenExceptionFor == type)
             {
-                throw new InvalidOperationException($"{type} could not open (simulated failure).");
+                // Mirrors the real WindowsManager: a failed open stops counting as pending and raises
+                // QueueBecameIdle before the exception reaches the caller - a wake the runner must not turn into
+                // an immediate retry of the same broken window.
+                IsQueueIdle = true;
+                QueueBecameIdle?.Invoke();
+                throw new InvalidOperationException($"[Expected] {type} could not open (simulated failure).");
             }
 
             WindowHandle handle = null;
@@ -48,6 +58,8 @@ namespace PopupSystem.Tests.EditMode.Fakes
                 return UniTask.CompletedTask;
             });
 
+            // Busy synchronously, as production is: WindowsManager counts a pending open before it awaits the prefab
+            // load. A PlayMode test pins the production side (see the "drift" rule in testing-in-unity.md).
             IsQueueIdle = false;
             OpenCalls.Add(new OpenCall(type, payload, handle));
             return UniTask.FromResult(handle);

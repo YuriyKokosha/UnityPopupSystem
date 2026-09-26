@@ -30,8 +30,23 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3f341d4e4aff6428c98a85b329e3c2cc
+    m_Address: UI/Currencies/energy
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 59faaf3c9b6a47eeb54c29f6b0aa7bd0
     m_Address: UI/Windows/SettingsWindow
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6765ca22afd7046d9b9b076b18791c1c
+    m_Address: UI/Currencies/gold
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6c79007e46b3e475e9436e935a44ccc9
+    m_Address: UI/Windows/InventoryWindow
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -45,8 +60,38 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 94f7dfad4c79b4feb82083c79f4fff8a
+    m_Address: UI/Items/Arrows
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a2a7cd4f8a689475386c1e07ce1ca53d
+    m_Address: UI/Currencies/gems
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c228e07af5b3240ab887f0fa2abb5f8b
+    m_Address: UI/Items/Ore
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cecce500ec1a34bee8d4303112525abf
+    m_Address: UI/Items/Chest
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eaf1c9cf01ed4f7f864b1dda70e62586
     m_Address: UI/PreloaderOverlay
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ed520cfdce1bb473a8ccabf35bdcfa9c
+    m_Address: UI/Items/Sword
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fdf9a1ad98d1f4613bb36e5b2f8ed24b
+    m_Address: UI/Items/HealthPotion
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

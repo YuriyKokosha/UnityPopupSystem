@@ -79,6 +79,18 @@
       "tint": "#E29A1F / pressed #CC8813 / disabled #5E5A50",
       "note": "fixed height 140 (132 body + 8 shadow), stretches horizontally only"
     },
+    "btn_pill_small.png": {
+      "size": "160x72",
+      "border_LBRT": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "#E29A1F / pressed #CC8813 / disabled #5E5A50",
+      "note": "small action inside a card (inventory Use/Drop); fixed height 72 (66 body + 6 shadow), stretches horizontally only - chip_9s at 40px high collapsed into an oval"
+    },
     "btn_round_body.png": {
       "size": "96x104",
       "border_LBRT": [
@@ -186,6 +198,78 @@
       "spriteMode": "Single",
       "tint": "white",
       "note": "shown when the remote offer banner fails to load"
+    },
+    "icon_energy.png": {
+      "size": "96x96",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "energy bolt, colours baked in"
+    },
+    "item_sword.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "Sword (UI/Items/Sword)"
+    },
+    "item_potion.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "Health Potion (UI/Items/HealthPotion)"
+    },
+    "item_arrows.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "Arrows (UI/Items/Arrows)"
+    },
+    "item_chest.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "Chest (UI/Items/Chest)"
+    },
+    "item_ore.png": {
+      "size": "128x128",
+      "border_LBRT": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "spriteMode": "Single",
+      "tint": "white",
+      "note": "Ore (UI/Items/Ore)"
     }
   }
 }

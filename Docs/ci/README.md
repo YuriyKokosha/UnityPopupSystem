@@ -1,7 +1,8 @@
 # CI
 
 `tests.yml` is the GitHub Actions workflow that runs both test suites (EditMode and PlayMode) via
-[GameCI](https://game-ci.github.io/) on every push and pull request.
+[GameCI](https://game-ci.github.io/) on pushes to `main`/`master`, on every pull request, and on
+demand (`workflow_dispatch`).
 
 **It is not active where it sits.** GitHub only runs workflows found in `.github/workflows/`, so
 this file has to be moved there once:
@@ -11,8 +12,8 @@ mkdir -p .github/workflows
 mv Docs/ci/tests.yml .github/workflows/tests.yml
 ```
 
-It was left here rather than placed directly because the tooling used to write it refuses to write
-into `.github/workflows/` — a sensible guard, since anything landing there executes on push.
+It lives here rather than in place because the authoring tooling refuses to write into
+`.github/workflows/` — a sensible guard, since anything landing there executes on push.
 
 ## Before the first green run
 

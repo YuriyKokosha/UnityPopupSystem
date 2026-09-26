@@ -6,8 +6,10 @@ using PopupSystem.Game.Services.DailyReward;
 using PopupSystem.Game.Services.Inventory;
 using PopupSystem.Game.Services.Offer;
 using PopupSystem.Game.Services.Profile;
+using PopupSystem.Game.Services.Rewards;
 using PopupSystem.Game.Services.Rpc;
 using PopupSystem.Game.Services.Time;
+using PopupSystem.Game.Services.Wallet;
 using PopupSystem.Game.Services.WindowQueue;
 using PopupSystem.Game.Services.WindowQueue.Aggregators;
 using PopupSystem.UI.Definitions;
@@ -21,6 +23,7 @@ using PopupSystem.UI.Runtime.Manager;
 using PopupSystem.UI.Runtime.Registry;
 using PopupSystem.UI.Services;
 using PopupSystem.UI.Windows.DailyReward;
+using PopupSystem.UI.Windows.Inventory;
 using PopupSystem.UI.Windows.MainGame;
 using PopupSystem.UI.Windows.Offer;
 using PopupSystem.UI.Windows.RewardPopup;
@@ -45,6 +48,10 @@ namespace PopupSystem.App.Bootstrap
             Container.Bind<AddressablesUiPrefabProvider>().AsSingle();
             Container.Bind<IUiPrefabProvider>().To<AddressablesUiPrefabProvider>().FromResolve();
             Container.Bind<IDisposable>().To<AddressablesUiPrefabProvider>().FromResolve();
+            Container.Bind<AddressablesUiIconProvider>().AsSingle();
+            Container.Bind<IUiIconProvider>().To<AddressablesUiIconProvider>().FromResolve();
+            Container.Bind<IDisposable>().To<AddressablesUiIconProvider>().FromResolve();
+            Container.Bind<RewardIcons>().AsSingle();
 
             Container.Bind<PreloaderOverlayView>().FromMethod(context =>
                 CreatePreloaderOverlay(context.Container.Resolve<IUiPrefabProvider>())).AsSingle();
@@ -60,8 +67,10 @@ namespace PopupSystem.App.Bootstrap
             Container.Bind<IWindowModule>().To<RewardPopupModule>().AsSingle();
             Container.Bind<IWindowModule>().To<DailyRewardWindowModule>().AsSingle();
             Container.Bind<IWindowModule>().To<OfferWindowModule>().AsSingle();
+            Container.Bind<IWindowModule>().To<InventoryWindowModule>().AsSingle();
 
             Container.BindIFactory<MainGameWindowController>().To<MainGameWindowController>();
+            Container.BindIFactory<InventoryWindowController>().To<InventoryWindowController>();
             Container.BindIFactory<SettingsWindowController>().To<SettingsWindowController>();
             Container.BindIFactory<RewardPopupController>().To<RewardPopupController>();
             Container.BindIFactory<DailyRewardWindowController>().To<DailyRewardWindowController>();
@@ -85,7 +94,12 @@ namespace PopupSystem.App.Bootstrap
             Container.Bind<ITickable>().To<TimeResyncTicker>().AsSingle();
 
             Container.Bind<PlayerProfileManager>().AsSingle();
-            Container.Bind<PlayerInventoryManager>().AsSingle();
+            Container.Bind<WalletManager>().AsSingle();
+            Container.Bind<IInventoryStorage>().To<FileInventoryStorage>().AsSingle()
+                .WithArguments(Application.persistentDataPath);
+            Container.Bind<InventoryManager>().AsSingle();
+            Container.Bind<InventorySyncService>().AsSingle();
+            Container.Bind<RewardGrantService>().AsSingle();
             Container.Bind<DailyRewardManager>().AsSingle();
             Container.Bind<OfferManager>().AsSingle();
             Container.Bind<WindowQueueManager>().AsSingle();

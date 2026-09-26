@@ -24,7 +24,8 @@ prefab whose root has a `Canvas` but no `GraphicRaycaster` renders perfectly and
 click. Miss the `Canvas` instead and the window draws *underneath* every window that has one.
 
 Copy an existing window prefab rather than building a root by hand. The root needs:
-`Canvas` (with `overrideSorting` on) + `GraphicRaycaster` + `CanvasGroup`.
+`Canvas` + `GraphicRaycaster` + `CanvasGroup`. The window prefabs leave `overrideSorting` off;
+`UILayerSorter.Apply` turns it on and sets `sortingOrder` once the window is active in its layer.
 
 ### 2. Between canvases, hierarchy order decides nothing — `sortingOrder` does
 
@@ -37,7 +38,7 @@ A window whose canvas kept the default `sortingOrder` of 0 would render at 0 no 
 sits in the hierarchy.
 
 `UILayerSorter` is the answer. Sibling index stays the single source of truth for stacking —
-`WindowsManager` and `ModalBackdropPresenter` keep using `SetAsLastSibling` and none of the
+`WindowFactory` and `ModalBackdropPresenter` keep using `SetAsLastSibling` and none of the
 stacking logic knows about sorting — and the sorter derives
 `sortingOrder = layerBase + siblingIndex + 1` from it after every open and close.
 

@@ -4,7 +4,9 @@ using Cysharp.Threading.Tasks;
 using PopupSystem.Contracts;
 using PopupSystem.Extensions;
 using PopupSystem.Game.Domain.Offer;
+using PopupSystem.Game.Services.Inventory;
 using PopupSystem.Game.Services.Offer;
+using PopupSystem.Game.Services.Wallet;
 using PopupSystem.UI.Runtime.Controller;
 using PopupSystem.UI.Services;
 using PopupSystem.UI.Windows.RewardPopup;
@@ -13,42 +15,69 @@ namespace PopupSystem.UI.Windows.Offer
 {
     public sealed class OfferWindowController : WindowController<EmptyWindowData, OfferWindowView>
     {
+        private const string InventoryFullText = "Inventory full";
+        private const string LoadingText = "Loading...";
+
         private readonly OfferManager _offerManager;
+        private readonly InventoryManager _inventoryManager;
+        private readonly WalletManager _walletManager;
         private readonly IWindowsManager _windowsManager;
         private readonly IRemoteImageLoader _imageLoader;
+        private readonly RewardIcons _icons;
         private bool _isPurchaseInProgress;
         private OfferData _offerData;
+        private OfferRemoteContent _content;
 
         public OfferWindowController(
             OfferManager offerManager,
+            InventoryManager inventoryManager,
+            WalletManager walletManager,
             IWindowsManager windowsManager,
-            IRemoteImageLoader imageLoader)
+            IRemoteImageLoader imageLoader,
+            RewardIcons icons)
         {
+            _icons = icons;
             _offerManager = offerManager;
+            _inventoryManager = inventoryManager;
+            _walletManager = walletManager;
             _windowsManager = windowsManager;
             _imageLoader = imageLoader;
         }
 
-        protected override UniTask OnInitializeAsync(EmptyWindowData data, CancellationToken cancellationToken)
+        protected override async UniTask OnInitializeAsync(EmptyWindowData data, CancellationToken cancellationToken)
         {
             _offerData = _offerManager.GetActiveOfferData();
             View.BuyClicked += OnBuyClicked;
+            View.SetActionInteractable(true);
 
             if (_offerData == null)
             {
                 View.SetContent("Offer", "No active offer.", "Close");
+                View.SetReward(null);
                 View.SetBannerLoading(false);
                 View.SetBannerFallback();
-                return UniTask.CompletedTask;
+                return;
             }
 
-            View.SetContent("Offer", "Loading offer...", string.Empty);
+            // The reward is local (it is the offer's bundle), only the copy and the banner are remote: the icons
+            // are on screen from the first frame, next to the "Loading offer..." placeholder.
+            await _icons.PreloadAsync(_offerData.Reward, cancellationToken);
+            View.SetReward(_icons.Describe(_offerData.Reward));
+
+            _inventoryManager.Changed += RefreshBuyButton;
+            _walletManager.BalancesChanged += RefreshBuyButton;
+            // Disabled until the copy arrives: an amber, clickable button with no label would sell the offer
+            // before the player has read what it is (the "Offer - loading" mockup still shows that state; see Docs/mockups/README.md).
+            View.SetActionInteractable(false);
+            View.SetContent("Offer", "Loading offer...", LoadingText);
             LoadRemoteContentAsync(cancellationToken).Forget();
-            return UniTask.CompletedTask;
         }
 
         public override void Dispose()
         {
+            _inventoryManager.Changed -= RefreshBuyButton;
+            _walletManager.BalancesChanged -= RefreshBuyButton;
+
             if (View != null)
             {
                 View.BuyClicked -= OnBuyClicked;
@@ -78,7 +107,8 @@ namespace PopupSystem.UI.Windows.Offer
                 return;
             }
 
-            view.SetContent(content.Title, content.Description, content.ActionText);
+            _content = content;
+            RefreshBuyButton();
 
             if (string.IsNullOrEmpty(content.BannerImageUrl))
             {
@@ -118,6 +148,42 @@ namespace PopupSystem.UI.Windows.Offer
             }
         }
 
+        // Same rule as the daily reward: a full inventory or an empty wallet disables Buy with a reason, and the
+        // button returns when a slot frees up or the balance changes. Copy is only written once remote content has
+        // arrived, so the loading text is not lost.
+        private void RefreshBuyButton()
+        {
+            if (_isPurchaseInProgress || View == null || _content == null || _offerData == null)
+            {
+                return;
+            }
+
+            var hasSpace = _offerManager.CanPurchaseIntoInventory(_offerData).Success;
+            var canAfford = _offerManager.CanAfford(_offerData);
+
+            View.SetActionInteractable(hasSpace && canAfford);
+            View.SetContent(_content.Title, _content.Description, ActionLabel(hasSpace, canAfford));
+        }
+
+        private string ActionLabel(bool hasSpace, bool canAfford)
+        {
+            if (!hasSpace)
+            {
+                return InventoryFullText;
+            }
+
+            var price = _offerData.Price;
+
+            if (!canAfford)
+            {
+                return $"Not enough {price.CurrencyId}";
+            }
+
+            return _offerData.IsFree
+                ? _content.ActionText
+                : $"{_content.ActionText} for {RewardIcons.FormatAmount(price.Amount)} {price.CurrencyId}";
+        }
+
         private void OnBuyClicked()
         {
             if (_offerData == null)
@@ -139,10 +205,14 @@ namespace PopupSystem.UI.Windows.Offer
         {
             var handle = Handle;
 
+            View.SetActionInteractable(false);
+
             // CancellationToken.None deliberately: this window is the one the queue may force-close, and the
             // lifetime token would cancel a payment the backend may already have taken.
             var purchaseTask = _offerManager.PurchaseOfferAsync(_offerData, CancellationToken.None).Share();
-            var rewardPopup = await _windowsManager.OpenAsync(WindowType.RewardPopup, new RewardPopupRequest(purchaseTask));
+            // A failed popup returns null instead of throwing: the purchase is already running and its outcome, not
+            // the popup's, decides whether the button comes back.
+            var rewardPopup = await RewardPopupLauncher.TryOpenAsync(_windowsManager, purchaseTask);
 
             try
             {
@@ -156,6 +226,12 @@ namespace PopupSystem.UI.Windows.Offer
             catch
             {
                 _isPurchaseInProgress = false;
+
+                if (!handle.IsClosed)
+                {
+                    RefreshBuyButton();
+                }
+
                 throw;
             }
 
@@ -164,7 +240,10 @@ namespace PopupSystem.UI.Windows.Offer
                 await handle.CloseAsync();
             }
 
-            await rewardPopup.WaitForCloseAsync();
+            if (rewardPopup != null)
+            {
+                await rewardPopup.WaitForCloseAsync();
+            }
         }
     }
 }

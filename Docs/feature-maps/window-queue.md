@@ -3,9 +3,10 @@
 **Folders:** `Assets/Scripts/Game/Domain/WindowQueue/**`, `Game/Services/WindowQueue/**`
 **Depends on:** `PopupSystem.Contracts` only — `IWindowsManager`, `WindowHandle`, `IWindowData`,
 `WindowType`. The queue depends on the presentation *port*, never on the window engine or on any
-concrete window, and this is now enforced by the assembly graph: `PopupSystem.Game` does not
+concrete window, and the assembly graph enforces it: `PopupSystem.Game` does not
 reference `PopupSystem.UI`, so a `using PopupSystem.UI.…` here is a build error.
-**Depended on by:** `App.States.AppMainGameState` (starts/stops it)
+**Depended on by:** `App.States.AppMainGameState` (starts/stops the runner),
+`App.States.AppConnectServerState` (feeds `WindowQueueManager.SetItems`), `AppInstaller` (bindings)
 **Related knowledge base:** [`time-and-cooldowns.md`](../knowledge-base/time-and-cooldowns.md)
 (what a cooldown means, why a config refresh must not reset one),
 [`resilience.md`](../knowledge-base/resilience.md) (the two suppression sets, the guarded loop, the
@@ -24,7 +25,7 @@ out for test coverage, and it's the one part of the codebase with dedicated auto
 | File | Responsibility |
 |---|---|
 | `Game/Domain/WindowQueue/WindowQueueInfo.cs` | Immutable config for one queueable window: `WindowType`, `Priority` (higher wins), `CooldownSeconds` (minimum gap between shows), `AllowInterrupt` (can a strictly-higher-priority item force-close it mid-show; defaults `true`). |
-| `Game/Services/WindowQueue/WindowQueueManager.cs` | Pure in-memory state: the current `WindowQueueInfo` set (replaced wholesale by `SetItems`, fetched from `IRpcManager.WindowQueue` at connect time), `GetItemsSortedByPriority()` (descending priority, `WindowType` as tiebreaker), per-type `_lastShownAt` for `IsCooldownReady`/`MarkShown`. Reads the clock through an injected `ITimeProvider`, never `DateTime.UtcNow` — see `game-services.md` for why. No Unity/async dependency — pure logic, hence directly unit-testable, cooldown expiry included. |
+| `Game/Services/WindowQueue/WindowQueueManager.cs` | Pure in-memory state: the current `WindowQueueInfo` set (replaced wholesale by `SetItems`, fetched from `IRpcManager.WindowQueue` at connect time), `GetItemsSortedByPriority()` (descending priority, `WindowType` as tiebreaker), per-type `_lastShownAt` for `IsCooldownReady`/`MarkShown`, `TimeUntilCooldownReady` (feeds the runner's scheduled wake), `Contains`, and `ItemsChanged` (raised by `SetItems`). Reads the clock through an injected `ITimeProvider`, never `DateTime.UtcNow` — see `game-services.md` for why. No Unity/async dependency — pure logic, hence directly unit-testable, cooldown expiry included. |
 | `Game/Services/WindowQueue/Aggregators/IWindowQueueAggregator.cs` | Bridges a `Game` feature into the queue: `WindowType`, `IsAvailable()` (should this window be offered right now?), `CreatePayload()` (what `IWindowData`, if any, to open it with), plus the two members that make the runner event-driven — `AvailabilityChanged` (raise it when the answer to `IsAvailable()` changes) and `NextAvailabilityChangeUtc` (when it will change on its own, if that is knowable; `null` if not). Multi-bound in `AppInstaller`, exactly like `IWindowModule`. |
 | `.../Aggregators/DailyRewardWindowAggregator.cs` | `IsAvailable()` → `DailyRewardManager.IsRewardAvailable()`; no payload. |
 | `.../Aggregators/OfferWindowAggregator.cs` | `IsAvailable()` → `OfferManager.GetActiveOfferData() != null`; no payload (the window fetches its own data on init). |
@@ -41,24 +42,23 @@ Two independent entry points into the same guarded routine:
   something can have changed** rather than ticking.
 
 Both funnel into `ShowAvailableWindowsInternalAsync`, guarded by an `_isProcessing` flag (a
-concurrent call is a same-frame no-op, not a second burst) and two sets: `_presentedSinceAvailable`
-(survives bursts — it is what stops a `CooldownSeconds == 0` item that is still "available", e.g.
-an unclaimed daily reward the player deliberately closed, from reopening forever) and
-`_failedThisBurst` (per burst — a window whose turn threw is suppressed for the rest of *this*
-burst but gets another chance on the next scan).
+concurrent call is a same-frame no-op, not a second burst) and two pieces of per-type state:
+`_presentedSinceAvailable` (survives bursts — it is what stops a `CooldownSeconds == 0` item that
+is still "available", e.g. an unclaimed daily reward the player deliberately closed, from reopening
+forever) and `_failures` (a window whose turn threw is left out until its retry time — see
+"Failures" below).
 
 ### Waking, not polling
 
-The runner used to run two timers: a 500 ms idle scan and a 250 ms interrupt check. Both ran for
-the life of the session, both allocated on every tick (the scan sorts the item list), and both
-turned every timing in the system into a range instead of a moment. `WaitForNextScanAsync` replaced
-them. It returns when the first of these happens:
+The runner does not poll. A polling timer would run for the life of the session, allocate on every
+tick (the scan sorts the item list) and turn every timing in the system into a range instead of a
+moment. `WaitForNextScanAsync` returns when the first of these happens:
 
 - an aggregator raises `AvailabilityChanged` — a reward was claimed, an offer was pulled;
 - `IWindowsManager.QueueBecameIdle` — the screen is free again;
 - `NextScheduledWakeMs()` elapses — the earliest moment anything changes on its own, taken as the
-  minimum over every item's remaining cooldown (`WindowQueueManager.TimeUntilCooldownReady`) and
-  every aggregator's `NextAvailabilityChangeUtc`;
+  minimum over every item's remaining cooldown (`WindowQueueManager.TimeUntilCooldownReady`),
+  every aggregator's `NextAvailabilityChangeUtc` and every failed window's retry time;
 - `FallbackHeartbeatMs` (60 s) elapses, when none of the above exists.
 
 The wake signal is a `UniTaskCompletionSource` **plus a `_wakeRequested` flag**, and the flag is
@@ -73,9 +73,9 @@ idle loop is suspended inside `ShowAvailableWindowsInternalAsync` while the watc
 is resumed by the player loop on a *later frame*, so it can still be inside `WaitForNextScanAsync`
 — in its `finally` — after the burst has moved on and the next waiter has already published its own
 source. That is why the `finally` clears the shared fields **only if they are still this call's
-own**. Clearing them unconditionally, which is what it used to do, meant a stale waiter could either
-null out the live waiter's source (so `Wake()` no longer reached it and it slept the full computed
-delay, up to `FallbackHeartbeatMs`) or swallow a wake request that had already arrived for it. Both
+own**. Clearing them unconditionally would let a stale waiter either null out the live waiter's
+source (so `Wake()` never reaches it and it sleeps the full computed delay, up to
+`FallbackHeartbeatMs`) or swallow a wake request that had already arrived for it. Both
 surface as *"the queued window appears up to a minute late, sometimes"* — the worst shape a defect
 can take, and the reason `WindowQueueRunnerTests` puts a 5-second bound on that path even though it
 cannot go red on demand.
@@ -111,10 +111,32 @@ if those two ever drift, the watcher can force-close a window in favour of a can
 scan then refuses to open, and the player is left staring at nothing. `ReArmPresentedWindows` owns
 every state change and runs first in the same pass; `IsEligible` itself never mutates.
 
-A window that throws while opening/waiting is logged and added to `_failedThisBurst` (so it doesn't
-hot-loop for the rest of *this* burst) but deliberately gets neither `MarkShown` nor a
-`_presentedSinceAvailable` entry — neither cooldown timing nor "it had its turn" should advance for
-a window that never appeared.
+### Failures
+
+Aggregators are extension points, so every call into one — `IsAvailable`, `CreatePayload`,
+`NextAvailabilityChangeUtc` — is contained to its own window. A window whose aggregator throws, or
+whose `OpenAsync` throws, is logged (`RecordFailure`) and left out of the scan, the watcher and the
+wake schedule until a **retry time**: 2 s after the first failure, doubling per consecutive failure,
+capped at 60 s. The time is measured on the injected `ITimeProvider` and is independent of wakes —
+the real `WindowsManager` raises `QueueBecameIdle` when a prefab load fails, and without the backoff
+that wake would retry the same broken window immediately (a per-burst "failed" set, cleared at the
+start of each burst, would allow exactly that). A successful open clears the
+record. The rest of the queue, lower priorities included, carries on meanwhile.
+
+Two rules keep the backoff honest. **One guard for every path:** `TryIsAvailable` is the only way the
+runner asks an aggregator for availability, and it refuses while the window waits to retry — the
+scan, the re-arm pass over already-shown windows and the interrupt watcher all go through it, so a
+wake can neither call the broken source again nor push its retry time out. **A new retry time counts
+at once:** when `NextAvailabilityChangeUtc` throws, the retry it sets is folded into the wait being
+computed in that same pass, so a source that recovers without raising anything is looked at when its
+retry is due, not a heartbeat later.
+
+A failed window deliberately gets neither `MarkShown` nor a `_presentedSinceAvailable` entry —
+neither cooldown timing nor "it had its turn" should advance for a window that never appeared.
+
+`MonitorIdleAsync` wraps each pass in its own `try/catch`, so an unexpected exception cannot end
+idle monitoring; after such a failure it waits 1 s (`MonitorFailureBackoffMs`) before the next pass
+whatever wakes it, so a failure that repeats synchronously cannot spin the main thread.
 
 ## Data flow (typical burst)
 
@@ -171,7 +193,7 @@ first automatic popup after a mid-session refresh waits out the fallback heartbe
 - Priority ties break on `WindowType`'s **enum value**, ascending — not on any notion of
   "fairness" or insertion order. Two features sharing a priority will always resolve the tie the
   same way every time.
-- The runner is only as responsive as its aggregators are honest. Everything now hangs off
+- The runner is only as responsive as its aggregators are honest. Everything hangs off
   `AvailabilityChanged` / `NextAvailabilityChangeUtc`; a feature that changes availability silently
   is invisible to the queue until the 60-second heartbeat, and nothing in the type system says so.
 - `WindowQueueRunner` is `IDisposable` and is bound as one in `AppInstaller`. It subscribes to every
